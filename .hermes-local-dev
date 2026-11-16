@@ -1,0 +1,5 @@
+Local development checkout.
+
+This checkout is the source of truth for a self-built Hermes desktop app.
+PM lazy installs are disabled so the app runs against the system Python and
+the checked-out source instead of syncing a managed runtime from the network.
