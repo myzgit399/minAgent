@@ -740,6 +740,19 @@ function toolStatus(part: ToolPart, resultRecord: Record<string, unknown>): Tool
     return 'notice'
   }
 
+  // Command/code runs that produced visible output are routine progress even
+  // when the outer envelope flags an error (multi-command verification, grep
+  // with no match, etc.). Keep them neutral so only genuinely silent failures
+  // are painted destructive-red.
+  if (part.toolName === 'terminal' || part.toolName === 'execute_code') {
+    const visibleOutput = firstStringField(resultRecord, [
+      'output', 'stdout', 'stderr', 'output_preview', 'text', 'content'
+    ])
+    if (visibleOutput?.trim()) {
+      return 'notice'
+    }
+  }
+
   // A rejected memory write is a budget negotiation, not a failure: the store
   // refuses an over-limit batch and the agent retries smaller. Soft warning —
   // never destructive-red beside routine bookkeeping.
