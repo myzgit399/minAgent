@@ -5,7 +5,7 @@ model:
 providers:
   modelscope:
     api: https://api-inference.modelscope.cn/v1
-    key_env: MODELSCOPE_ACCESS_TOKEN
+    key_env: MODELSCOPE_KEY
     transport: chat_completions
     default_model: Qwen/Qwen3.5-35B-A3B
 
