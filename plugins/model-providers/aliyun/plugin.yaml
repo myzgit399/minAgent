@@ -1,0 +1,5 @@
+name: aliyun-provider
+kind: model-provider
+version: 1.0.0
+description: Aliyun DashScope (阿里云百炼, mainland China), keyed by ALI_KEY
+author: Nous Research

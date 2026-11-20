@@ -414,7 +414,14 @@ function ModelResults({
               {provider.plan_usage?.kind === 'usage_window' ? (
                 <UsageLevelTag isCurrent={isCurrent} level={usageTag(provider, model)} />
               ) : (
-                <ModelPrice isCurrent={isCurrent} price={price} />
+                <>
+                  <ModelPrice isCurrent={isCurrent} price={price} />
+                  <TokenMultiplier
+                    basis={provider.token_multiplier_basis}
+                    isCurrent={isCurrent}
+                    label={provider.token_multiplier_labels?.[model]}
+                  />
+                </>
               )}
             </CommandItem>
           )
@@ -743,6 +750,35 @@ function PlanUsageSummary({ provider, usage }: { provider: ModelOptionProvider; 
         })}
       </div>
     </div>
+  )
+}
+
+// Token 倍数 badge: DashScope (百炼) serves no prices from /v1/models, so the backend quotes
+// each Qwen model against the 套餐 basis model (``qwen-plus`` = 1×) and hands the picker a
+// pre-formatted ``×N`` label. Renders nothing for providers without a multiplier table.
+function TokenMultiplier({
+  basis,
+  isCurrent,
+  label
+}: {
+  basis?: string | null
+  isCurrent: boolean
+  label?: string | null
+}) {
+  if (!label) {
+    return null
+  }
+
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-sm px-1 py-0.5 font-sans text-[0.62rem] font-semibold tabular-nums',
+        isCurrent ? 'bg-primary-foreground/20' : 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
+      )}
+      title={basis ? `${label} tokens · 1× = ${basis}` : `${label} tokens`}
+    >
+      {label}
+    </span>
   )
 }
 

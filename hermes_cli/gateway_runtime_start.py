@@ -46,6 +46,12 @@ DAEMON_STRIPPED_ENV = (
     "HERMES_ENABLE_PROJECT_PLUGINS", "HERMES_TUI_CLIENT_ENV", *SUPERVISOR_MARKER_ENV,
 )
 
+# Records the host (``<kind>:<pid>``) whose request this daemon answers: Desktop's ``gateway ensure``,
+# a CLI/TUI's own start. The daemon ends itself once that host exits, with no shutdown handoff to rely
+# on (a crash, a force-quit), so it never outlives the application that started it. Launch metadata
+# only: the host registry (gateway_host_lifecycle) stays the authority for the orderly stop.
+HOST_PID_ENV = "_HERMES_GATEWAY_HOST_PID"
+
 
 def strip_supervisor_markers(env: dict) -> dict:
     """Drop :data:`SUPERVISOR_MARKER_ENV` from a detached gateway's env, in place; returns *env*."""
@@ -69,13 +75,15 @@ CLIENT_ELEVATED_REMEDY = (
 
 
 def spawn_unmanaged_gateway(profile_home: Path, *, deadline: float, idle_exit: bool = False,
-                            force: bool = False) -> subprocess.Popen | GatewayJob:
+                            force: bool = False, host: str | None = None) -> subprocess.Popen | GatewayJob:
     """Request a daemon, not readiness. Refuse Windows no-breakaway fallback.
 
     No --replace, persistence, login changes, elevation, shell, or inherited stdio.
     The gateway runtime's own exclusive ownership fence arbitrates racing starts.
     ``idle_exit``: the daemon ends itself once idle (a chat/TUI/cron client's own start; never
     Desktop's ``gateway ensure``, which keeps its attached gateway for the app's lifetime).
+    ``host``: ``<kind>:<pid>`` of the host that requested this daemon; it ends with that host
+    (:data:`HOST_PID_ENV`), so a gateway started with the application stops with it.
     ``force``: a ``gateway restart --force --detach`` replacement keeps the ``--force`` its old owner
     needed (a named profile under a multiplexer), or it exits on the run-side guard.
     """
@@ -104,6 +112,8 @@ def spawn_unmanaged_gateway(profile_home: Path, *, deadline: float, idle_exit: b
         env.update(overlay)
         env[_WINDOWS_GATEWAY_BREAKAWAY_ENV] = "1"
     env.update(HERMES_HOME=str(home), HERMES_GATEWAY_DETACHED="1", PYTHONIOENCODING="utf-8")
+    if host:
+        env[HOST_PID_ENV] = host
     # Profile selection is the explicit home, not the invoking client's display
     # name. Launch-only approval/context/config flags ride the launching session's frozen
     # policy, not the shared daemon or every later session.
@@ -131,9 +141,36 @@ def spawn_unmanaged_gateway(profile_home: Path, *, deadline: float, idle_exit: b
                                     # detached-spawn: ok — a gateway daemon launch must outlive its launcher
                                     **windows_detach_popen_kwargs())
         except OSError as exc:
-            # Only CreateProcess's own refusal is the job's verdict.
-            reason = "windows_breakaway_unavailable" if sys.platform == "win32" else "spawn_failed"
-            raise RuntimeStartError(reason, detail=os_refusal(exc)) from exc
+            if sys.platform != "win32":
+                raise RuntimeStartError("spawn_failed", detail=os_refusal(exc)) from exc
+            if not _breakaway_refused(exc):
+                raise RuntimeStartError("windows_breakaway_unavailable", detail=os_refusal(exc)) from exc
+            # The parent's job object forbids CREATE_BREAKAWAY_FROM_JOB (the Desktop app's
+            # Electron job, some Windows Terminal configs). Retry with the hidden-console
+            # detach the other Windows launchers already fall back to (gateway_windows
+            # _spawn_detached, web_server_gateway, main_desktop): the child stays in the
+            # parent's job, so it ends with the job the host that asked for it owns.
+            # Desktop's last-host ``gateway host-release`` stops it on quit.
+            from hermes_cli._subprocess_compat import windows_detach_flags_without_breakaway
+            remaining(deadline)
+            try:
+                return subprocess.Popen(command, cwd=root,
+                                        env={**env, _WINDOWS_GATEWAY_BREAKAWAY_ENV: "0"}, close_fds=True,
+                                        stdin=subprocess.DEVNULL, stdout=output, stderr=output,
+                                        # detached-spawn: ok — breakaway refused; hidden-console job-bound start
+                                        creationflags=windows_detach_flags_without_breakaway())
+            except OSError as retry_exc:
+                raise RuntimeStartError("windows_breakaway_unavailable",
+                                        detail=os_refusal(retry_exc)) from retry_exc
+
+
+# ERROR_ACCESS_DENIED: the job object's verdict ("breakaway not allowed").
+_WINDOWS_ACCESS_DENIED = 5
+
+
+def _breakaway_refused(exc: OSError) -> bool:
+    """Whether CreateProcess refused the breakaway flag rather than the spawn as a whole."""
+    return getattr(exc, "winerror", None) == _WINDOWS_ACCESS_DENIED
 
 
 def os_refusal(exc: OSError) -> str | None:

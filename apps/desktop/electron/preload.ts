@@ -373,6 +373,48 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   saveTextFileAs: request => ipcRenderer.invoke('hermes:saveTextFileAs', request),
   writeClipboard: text => ipcRenderer.invoke('hermes:writeClipboard', text),
   readClipboard: () => ipcRenderer.invoke('hermes:readClipboard'),
+  // xGrok PTY: the real Grok Build TUI in a pseudo-terminal (full feature parity).
+  xgrokPtyAvailable: () => ipcRenderer.invoke('xgrok:pty:available'),
+  xgrokPtyExe: () => ipcRenderer.invoke('xgrok:pty:exe'),
+  xgrokPtyStart: config => ipcRenderer.invoke('xgrok:pty:start', config),
+  xgrokPtyWrite: (id, data) => ipcRenderer.invoke('xgrok:pty:write', id, data),
+  xgrokPtyResize: (id, size) => ipcRenderer.invoke('xgrok:pty:resize', id, size),
+  xgrokPtyDispose: id => ipcRenderer.invoke('xgrok:pty:dispose', id),
+  xgrokPtySwitchModel: payload => ipcRenderer.invoke('xgrok:pty:switchModel', payload),
+  // xGrok model catalog (grouped) + per-model proxy policy.
+  xgrokModelCatalog: () => ipcRenderer.invoke('xgrok:model:catalog'),
+  xgrokModelProxy: payload => ipcRenderer.invoke('xgrok:model:proxy', payload),
+  xgrokModelProxyState: () => ipcRenderer.invoke('xgrok:model:proxyState'),
+  onXGrokPtyData: (tabId, callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on(`xgrok:pty:${tabId}:data`, listener)
+
+    return () => ipcRenderer.removeListener(`xgrok:pty:${tabId}:data`, listener)
+  },
+  onXGrokPtyExit: (tabId, callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on(`xgrok:pty:${tabId}:exit`, listener)
+
+    return () => ipcRenderer.removeListener(`xgrok:pty:${tabId}:exit`, listener)
+  },
+  // xGrok: in-process grok-build engine (Rust FFI). Output arrives via onXGrokLine.
+  xgrokAvailable: () => ipcRenderer.invoke('xgrok:available'),
+  xgrokVersion: () => ipcRenderer.invoke('xgrok:version'),
+  xgrokModels: () => ipcRenderer.invoke('xgrok:models'),
+  xgrokRun: config => ipcRenderer.invoke('xgrok:run', config),
+  xgrokCancel: tabId => ipcRenderer.invoke('xgrok:cancel', tabId),
+  onXGrokLine: callback => {
+    const listener = (_event, line) => callback(line)
+    ipcRenderer.on('xgrok:line', listener)
+
+    return () => ipcRenderer.removeListener('xgrok:line', listener)
+  },
+  onXGrokDone: callback => {
+    const listener = (_event, done) => callback(done)
+    ipcRenderer.on('xgrok:done', listener)
+
+    return () => ipcRenderer.removeListener('xgrok:done', listener)
+  },
   saveGatewayFile: payload => ipcRenderer.invoke('hermes:saveGatewayFile', payload),
   saveImageFromUrl: url => ipcRenderer.invoke('hermes:saveImageFromUrl', url),
   contextMenuEdit: command => ipcRenderer.invoke('hermes:context-menu:edit', command),
@@ -444,6 +486,8 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   beginPreviewGuestActivity: webContentsId => ipcRenderer.invoke('hermes:preview-guest-activity:begin', webContentsId),
   endPreviewGuestActivity: token => ipcRenderer.invoke('hermes:preview-guest-activity:end', token),
   executePreviewGuestScript: (token, code) => ipcRenderer.invoke('hermes:preview-guest-activity:script', token, code),
+  setPreviewTabProxy: request => ipcRenderer.invoke('hermes:preview:proxy', request),
+  getPreviewWpsSid: request => ipcRenderer.invoke('hermes:preview:cookie', request),
   syncPreviewSignins: request => ipcRenderer.invoke('hermes:preview-signins:sync', request),
   migratePreviewSigninsForProfile: (request: { oldProfile: string; newProfile: string }) =>
     ipcRenderer.invoke('hermes:preview-signins:profile-renamed', request),

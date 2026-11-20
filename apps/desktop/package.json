@@ -1,9 +1,9 @@
 {
-  "name": "hermes",
-  "productName": "Hermes",
+  "name": "minAgent",
+  "productName": "minAgent",
   "private": true,
   "version": "0.0.0",
-  "description": "Native desktop shell for Hermes Agent.",
+  "description": "Native desktop shell for minAgent.",
   "author": "Nous Research",
   "repository": {
     "type": "git",
@@ -82,6 +82,7 @@
     "repro:short-session-hang": "node scripts/run-short-session-hang-repro.mjs"
   },
   "dependencies": {
+    "koffi": "^2.11.0",
     "@assistant-ui/core": "0.2.23",
     "@assistant-ui/react": "0.14.29",
     "@assistant-ui/react-streamdown": "0.3.7",

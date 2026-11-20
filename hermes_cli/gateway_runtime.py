@@ -124,10 +124,11 @@ def _endpoint(payload: dict, home: Path, control_home: Path | None = None) -> Ga
     from gateway.drain_control import RESTART_WAIT_REASON
     restart_wait = state == "draining" and payload.get("drain_reason") == RESTART_WAIT_REASON
     if state in {"starting", "draining", "conflict"} and not restart_wait:
-        # An auto-started gateway ending through its idle exit names that, so its clients wait
-        # for it to go and start a fresh one instead of reporting a refusal.
-        idle = state == "draining" and payload.get("drain_reason") == "idle_exit"
-        return GatewayDiscovery(state, reason_code="idle_exit" if idle else None)
+        # A gateway ending by itself (an auto-started one going idle, or one whose host exited) names
+        # that, so its clients wait for it to go and start a fresh one instead of reporting a refusal.
+        leaving = payload.get("drain_reason") if state == "draining" else None
+        reason = leaving if leaving in _RETIRING else None
+        return GatewayDiscovery(state, reason_code=reason)
     if state != "ready" and not restart_wait:
         return GatewayDiscovery("inaccessible", reason_code="invalid_runtime_state")
     capabilities = payload.get("capabilities")
@@ -388,9 +389,10 @@ def _fenced_verdict(home: Path, timeout: float) -> GatewayDiscovery:
 
 
 _REPLACE_FAILED_DETAIL = "an older Hermes gateway still owns this profile after a stop; run: hermes gateway stop"
-# ``draining`` reasons after which the owner is going away by itself: its own idle exit, or the
-# older-Hermes owner this call just stopped. Ensure waits it out and starts the current owner.
-_RETIRING = frozenset({"idle_exit", "replaced"})
+# ``draining`` reasons after which the owner is going away by itself: its own idle exit, the host it
+# was started for exiting (gateway.run_idle_exit.HOST_EXIT_REASON), or the older-Hermes owner this
+# call just stopped. Ensure waits it out and starts the current owner.
+_RETIRING = frozenset({"idle_exit", "host_exit", "replaced"})
 
 
 def _observe_replacing_stale(home: Path, deadline: float, replaced: set[Path]) -> GatewayDiscovery:
@@ -412,7 +414,7 @@ def _observe_replacing_stale(home: Path, deadline: float, replaced: set[Path]) -
 
 
 def ensure_gateway_runtime(profile_home: str | Path, *, timeout: float | None = None,
-                           idle_exit: bool = False) -> GatewayDiscovery:
+                           idle_exit: bool = False, host: str | None = None) -> GatewayDiscovery:
     """Ensure once; pending remains pending at deadline.
 
     ``timeout`` None: :data:`DEFAULT_ENSURE_TIMEOUT`, extended while the pending start's owner keeps
@@ -430,6 +432,7 @@ def ensure_gateway_runtime(profile_home: str | Path, *, timeout: float | None = 
     ``idle_exit``: an unmanaged daemon this call starts ends itself once idle (client entrypoints:
     chat, TUI, cron/kanban/ACP clients). A gateway that is ending that way reports ``draining``
     (``idle_exit``); this call waits for it to go and starts the replacement transparently.
+    ``host``: ``<kind>:<pid>`` of the requesting host; a daemon this call starts ends with it.
     """
     import time
     from hermes_cli.gateway_runtime_service import (
@@ -511,10 +514,10 @@ def ensure_gateway_runtime(profile_home: str | Path, *, timeout: float | None = 
                 from hermes_cli.gateway_runtime_multiplex import implied_host_root, multiplexer_serves_home
                 target = multiplexer_serves_home(home) or home
                 service = discover_existing_gateway_service(target, deadline=deadline)
-                if service is None and target == home and (host := implied_host_root(home)) is not None:
+                if service is None and target == home and (multiplexer_root := implied_host_root(home)) is not None:
                     # Main's guard refuses a named profile a gateway of its own unless it is standalone
                     # or already installed; with no multiplexer evidence yet, the host is still its owner.
-                    target = host
+                    target = multiplexer_root
                     service = discover_existing_gateway_service(target, deadline=deadline)
                 # Runtime locks settle races remaining after this second probe.
                 observed = discover_gateway_endpoint(home, timeout=remaining(deadline))
@@ -526,7 +529,7 @@ def ensure_gateway_runtime(profile_home: str | Path, *, timeout: float | None = 
                 else:
                     from hermes_cli.gateway_runtime_start import spawn_unmanaged_gateway, stdio_log_size
                     child_home, child_offset = target, stdio_log_size(target)
-                    child = spawn_unmanaged_gateway(target, deadline=deadline, idle_exit=idle_exit)
+                    child = spawn_unmanaged_gateway(target, deadline=deadline, idle_exit=idle_exit, host=host)
                 requested = True
                 waiting[target] = None
             # Never raises: an exhausted budget gets one more sample (top of loop) before its verdict.

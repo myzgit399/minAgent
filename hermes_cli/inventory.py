@@ -893,6 +893,19 @@ def _plan_usage_window(g) -> dict:
 
 
 # health: allow CC -- usage-window plans: one branch attaches plan usage to the Nous row (built in _attach_nous_plan_usage); over target on main
+# DashScope-backed rows (Qwen via 百炼, the domestic ``aliyun`` profile, and the Token/Coding
+# plan twins) share one catalog and one price basis — see ``hermes_cli.qwen_catalog``.
+_DASHSCOPE_ROW_SLUGS = frozenset({
+    "alibaba", "alibaba-cn", "aliyun", "aliyun-dashscope", "dashscope", "dashscope-cn",
+    "bailian", "ali-bailian", "alibaba-token-plan", "alibaba-token-plan-cn",
+    "alibaba-coding-plan", "alibaba-coding-plan-cn",
+})
+
+
+def _is_dashscope_row(slug: str) -> bool:
+    return str(slug or "").strip().lower() in _DASHSCOPE_ROW_SLUGS
+
+
 def _apply_pricing(rows: list[dict], *, force_fresh_nous_tier: bool = False, cached_only: bool = False) -> None:
     """Set ``row["pricing"] = {model_id: {input, output, cache | None, free}}``; for Nous also
     ``free_tier`` (account is free-tier) and ``unavailable_models`` (paid models a free user can't pick).
@@ -927,6 +940,16 @@ def _apply_pricing(rows: list[dict], *, force_fresh_nous_tier: bool = False, cac
             raw_pricing = get_pricing_for_provider(slug, **pricing_kwargs) or {}
         except Exception:
             raw_pricing = {}
+        if not raw_pricing and _is_dashscope_row(slug):
+            # DashScope's ``/v1/models`` publishes no pricing, so the Qwen rows had a blank
+            # price/multiplier column. The models.dev registry does carry list prices (and the
+            # registry is also where new ids like ``qwen3.8-flash`` come from).
+            try:
+                from hermes_cli.qwen_catalog import dashscope_pricing
+
+                raw_pricing = dashscope_pricing() or {}
+            except Exception:
+                raw_pricing = {}
         cached_nous_tier: Optional[bool] = None
         plan_usage = _attach_nous_plan_usage(row, warm=not cached_only) if slug == "nous" else None
         if slug == "nous" and cached_only:
@@ -975,6 +998,46 @@ def _apply_pricing(rows: list[dict], *, force_fresh_nous_tier: bool = False, cac
 
         if formatted:
             row["pricing"] = formatted
+
+            if _is_dashscope_row(slug):
+                # Token 倍数: the picker's price column was blank for every Qwen model because
+                # DashScope serves no prices. Quote each model against the 套餐 basis model
+                # (``qwen-plus`` = 1×) so the numbers match how 百炼 prices a Token 套餐.
+                try:
+                    from hermes_cli.qwen_catalog import (
+                        dashscope_multiplier_basis,
+                        dashscope_token_multipliers,
+                        format_multiplier,
+                    )
+
+                    multipliers = dashscope_token_multipliers()
+                    if multipliers:
+                        row["token_multipliers"] = multipliers
+                        row["token_multiplier_labels"] = {
+                            mid: format_multiplier(value) for mid, value in multipliers.items()
+                        }
+                        if basis := dashscope_multiplier_basis():
+                            row["token_multiplier_basis"] = basis
+                except Exception:
+                    pass
+            else:
+                _ref: Optional[str] = None
+                for mid, pr in formatted.items():
+                    if not pr.get("free"):
+                        _ref = mid
+                        break
+                _ref_pr = formatted.get(_ref, {}).get("input") or ""
+                try:
+                    ref_val = float(_ref_pr.replace("$", "").replace(",", "").strip())
+                    if ref_val > 0:
+                        row["price_multipliers"] = {
+                            m: round(float(str(p.get("input", "")).replace("$", "").replace(",", "").strip()) / ref_val, 2)
+                            for m, p in formatted.items()
+                        }
+                    else:
+                        row["price_multipliers"] = {m: 0.0 for m in formatted}
+                except (ValueError, TypeError):
+                    row["price_multipliers"] = {m: 1.0 for m in formatted}
 
         if slug == "nous":
             try:

@@ -411,6 +411,17 @@ def _base_kwargs(model: str, sanitized: list, tools: Any, params: dict, profile:
 
 def _finish_kwargs(api_kwargs: dict[str, Any], sanitized: list, params: dict, *, supports_prompt_cache_key: bool) -> dict[str, Any]:
     """Tail shared by both build paths: content-addressed prompt_cache_key, then return."""
+    import os as _os
+    if _os.environ.get("HERMES_DEBUG_KWARGS"):
+        import sys as _sys, traceback as _tb
+        _sys.stderr.write(
+            "DEBUGKW provider=%r base_url=%r keys=%r stack=%s\n" % (
+                params.get("provider_name"), params.get("base_url"), sorted(api_kwargs),
+                " <- ".join(f"{f.name}:{f.lineno}" for f in _tb.extract_stack()[-6:-1]),
+            )
+        )
+        _sys.stderr.flush()
+
     _add_prompt_cache_key(
         api_kwargs, messages=sanitized, tools=api_kwargs.get("tools"), supports_prompt_cache_key=supports_prompt_cache_key,
         session_id=params.get("session_id"), cache_scope_id=params.get("cache_scope_id"),

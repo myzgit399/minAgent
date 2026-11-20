@@ -128,6 +128,8 @@ def build_gateway_parser(
     _flag(gateway_ensure, "--json", help="Emit one credential-free JSON result (default)")
     gateway_ensure.add_argument("--timeout", default="60",
                                 help="Total startup deadline in seconds (default: 60)")
+    gateway_ensure.add_argument("--host-pid", type=int, help=argparse.SUPPRESS)
+    gateway_ensure.add_argument("--host-kind", choices=("cli", "gui"), help=argparse.SUPPRESS)
     gateway_ensure.set_defaults(func=cmd_gateway_ensure)
 
     gateway_attach = gateway_subparsers.add_parser(
@@ -146,7 +148,18 @@ def build_gateway_parser(
         help="Discover first; start (or replace an older Hermes's) gateway only when it is not ready")
     gateway_attach.add_argument("--timeout", default="60",
                                 help="Start deadline in seconds for --start/--recover (default: 60)")
+    gateway_attach.add_argument("--host-pid", type=int, help=argparse.SUPPRESS)
+    gateway_attach.add_argument("--host-kind", choices=("cli", "gui"), help=argparse.SUPPRESS)
     gateway_attach.set_defaults(func=cmd_gateway_attach)
+
+    from hermes_cli.gateway_runtime_cli import cmd_gateway_host_release
+    gateway_release = gateway_subparsers.add_parser(
+        "host-release", json_verb="host-release", help=argparse.SUPPRESS,
+    )
+    gateway_release.add_argument("--host-pid", type=int, required=True)
+    gateway_release.add_argument("--host-kind", choices=("cli", "gui"), required=True)
+    gateway_release.add_argument("--timeout", default="30", help=argparse.SUPPRESS)
+    gateway_release.set_defaults(func=cmd_gateway_host_release)
 
     from hermes_cli.gateway_runtime_tickets import cmd_gateway_tickets
     gateway_tickets = gateway_subparsers.add_parser(

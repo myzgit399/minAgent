@@ -1058,11 +1058,16 @@ describe('PreviewPane console state', () => {
 
 describe('PreviewPane guest external handoff', () => {
   // #112941: a guest page's `_blank` anchor (Streamlit's "Ask Google" button)
-  // reaches the OS browser only through the audited `hermes:openExternal` IPC.
+  // reaches the host renderer through the guest preload's `sendToHost` channel.
+  // It opens an in-app Browser tab beside the one it was clicked in — never the
+  // system browser, which used to throw the reader out of the workspace.
   const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
   const initialHermesDesktop = desktopWindow.hermesDesktop
 
   afterEach(() => {
+    $previewTabs.set([])
+    $rightRailActiveTabId.set(null)
+
     if (initialHermesDesktop) {
       desktopWindow.hermesDesktop = initialHermesDesktop
     } else {
@@ -1098,12 +1103,20 @@ describe('PreviewPane guest external handoff', () => {
     })
   }
 
-  it('opens an admitted guest anchor URL through the audited OS-browser channel', async () => {
+  it('opens an admitted guest anchor URL as a new in-app Browser tab', async () => {
     const { openExternal, webview } = await renderWebview()
 
     guestMessage(webview, 'https://www.google.com/search?q=traceback')
 
-    expect(openExternal).toHaveBeenCalledExactlyOnceWith('https://www.google.com/search?q=traceback')
+    const tabs = $previewTabs.get()
+
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0].target.url).toBe('https://www.google.com/search?q=traceback')
+    expect(tabs[0].target.kind).toBe('url')
+    // Focused, so the reader lands on the page they clicked.
+    expect($rightRailActiveTabId.get()).toBe(tabs[0].id)
+    // The system browser is never the destination any more.
+    expect(openExternal).not.toHaveBeenCalled()
   })
 
   it('never opens non-web schemes or messages from a channel the preload does not own', async () => {
@@ -1115,6 +1128,8 @@ describe('PreviewPane guest external handoff', () => {
     guestMessage(webview, 'https://example.com', 'something-else')
 
     expect(openExternal).not.toHaveBeenCalled()
+    // Not even a Browser tab: the scheme never got past admission.
+    expect($previewTabs.get()).toHaveLength(0)
   })
 })
 

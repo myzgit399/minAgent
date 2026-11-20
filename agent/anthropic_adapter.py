@@ -371,7 +371,7 @@ def _beta_header(betas: list) -> dict[str, str]:
 def _attribution_headers() -> dict[str, str]:
     """Same client-attribution set sent to OpenRouter / Vercel AI Gateway / Fireworks."""
     return {
-        "HTTP-Referer": "https://hermes-agent.nousresearch.com", "X-Title": "Hermes Agent",
+        "HTTP-Referer": "https://hermes-agent.nousresearch.com", "X-Title": "minAgent",
         "User-Agent": f"HermesAgent/{get_version_info().base_version}",
     }
 
@@ -488,7 +488,10 @@ def _auth_style(api_key, base_url, normalized_base_url) -> str:
     return "api_key"
 
 
-def build_anthropic_client(api_key, base_url: str | None = None, timeout: float | None = None, *, drop_context_1m_beta: bool = False):
+def build_anthropic_client(
+    api_key, base_url: str | None = None, timeout: float | None = None, *,
+    drop_context_1m_beta: bool = False, proxy_override: Optional[str] = None,
+):
     """Create an Anthropic client, auto-detecting setup-tokens vs API keys. ``api_key`` is a static
     ``str`` or a ``Callable[[], str]`` Entra ID bearer provider (routed through
     :func:`_build_anthropic_client_with_bearer_hook`). ``timeout`` overrides the 900s read timeout
@@ -502,6 +505,12 @@ def build_anthropic_client(api_key, base_url: str | None = None, timeout: float 
         )
     normalize_proxy_env_vars()
     normalized_base_url, kwargs = _base_client_kwargs(base_url, timeout)
+    if proxy_override is not None:
+        from agent.process_bootstrap import build_keepalive_http_client
+
+        http_client = build_keepalive_http_client(normalized_base_url or "", proxy_override=proxy_override)
+        if http_client is not None:
+            kwargs["http_client"] = http_client
     if "default_query" in kwargs:  # historical: this path also strips a stray trailing slash on Azure
         kwargs["base_url"] = normalized_base_url.rstrip("/")
     common_betas = _common_betas_for_base_url(normalized_base_url, drop_context_1m_beta=drop_context_1m_beta)
@@ -577,7 +586,7 @@ def _oauth_wire_namer(anthropic_tools: list[dict[str, Any]]):
 
 
 _OAUTH_SYSTEM_REPLACEMENTS = (
-    ("Hermes Agent", "Claude Code"), ("Hermes agent", "Claude Code"), ("Nous Research", "Anthropic"),
+    ("minAgent", "Claude Code"), ("minAgent agent", "Claude Code"), ("Nous Research", "Anthropic"),
 )
 # The slug is rewritten only as a standalone prose word. Joined to a host, path, repo, mailbox
 # or quoted as an identifier (``hermes-agent.nousresearch.com``, ``~/.hermes/hermes-agent/venv``,

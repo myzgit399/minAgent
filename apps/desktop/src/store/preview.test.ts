@@ -27,6 +27,7 @@ import {
   markPreviewTabMissing,
   newBrowserTab,
   noteBrowserPage,
+  openBrowserLinkInNewTab,
   openPreview,
   previewTabId,
   previewTabIdsVisibleTo,
@@ -38,7 +39,8 @@ import {
   renderedHtmlTarget,
   setPreviewRenderMode,
   setPreviewScope,
-  setPreviewTabPinned
+  setPreviewTabPinned,
+  setPreviewTabProxy
 } from './preview'
 import { $activeSessionId, $selectedStoredSessionId, $sessions } from './session'
 import { dropSessionState, publishSessionState } from './session-states'
@@ -134,6 +136,18 @@ describe('preview store', () => {
 
     expect(urlTabs.map(tab => tab.target.url)).toEqual(['https://news.ycombinator.com', 'https://www.reddit.com'])
     expect(new Set(urlTabs.map(tab => tab.id)).size).toBe(2)
+  })
+
+  it('persists the proxy choice per browser tab', () => {
+    newBrowserTab()
+    const first = $previewTabs.get()[0].id
+    newBrowserTab()
+    const second = $previewTabs.get()[1].id
+
+    setPreviewTabProxy(first, true)
+
+    expect($previewTabs.get().find(tab => tab.id === first)?.proxy).toBe(true)
+    expect($previewTabs.get().find(tab => tab.id === second)?.proxy).toBeUndefined()
   })
 
   // Which Browser a link lands in: the one on screen. Selecting the older tab
@@ -931,6 +945,33 @@ describe('preview session scoping (#73890)', () => {
       noteActiveTreeGroup(null)
       $layoutTree.set(previousTree)
     }
+  })
+
+  it('opens a clicked link as a NEW tab directly after the tab that spawned it', () => {
+    openPreview(urlTarget('https://news.ycombinator.com'))
+    const first = $previewTabs.get()[0].id
+
+    newBrowserTab()
+    const last = $previewTabs.get().at(-1)!.id
+
+    const created = openBrowserLinkInNewTab('https://example.com/doc', first)
+
+    const order = $previewTabs.get().map(tab => tab.id)
+
+    expect(created).not.toBeNull()
+    // Directly after the spawning tab, not at the end of the strip.
+    expect(order.indexOf(created!)).toBe(order.indexOf(first) + 1)
+    expect(order.at(-1)).toBe(last)
+    expect($rightRailActiveTabId.get()).toBe(created)
+    expect($previewTabs.get().find(tab => tab.id === created)?.target.label).toBe('example.com')
+  })
+
+  it('appends a clicked link when the spawning tab is gone', () => {
+    openPreview(urlTarget('https://news.ycombinator.com'))
+
+    const created = openBrowserLinkInNewTab('https://example.com/doc', 'url:missing')
+
+    expect($previewTabs.get().at(-1)?.id).toBe(created)
   })
 
   it('migrates legacy unscoped tabs to pinned and keeps their ids', () => {

@@ -40,6 +40,20 @@ export function previewPartitionForProfile(profile: string | null | undefined): 
 }
 
 /**
+ * The proxy jar for `profile` — one STABLE cookie jar shared by every proxied
+ * tab of that profile. It must NOT contain the tab id: a tab id is minted fresh
+ * for every new browser tab, so a per-tab suffix made each proxied tab open in
+ * an empty cookie jar and forced a login every time. Proxy rules are applied
+ * per session (session.fromPartition(partition).setProxy) and come from the one
+ * global model_proxy.url, so sharing one proxied jar per profile is safe and
+ * keeps sign-ins across tabs and restarts. Renderer (webview partition) and main
+ * (proxy IPC + sign-ins import) MUST use this exact function.
+ */
+export function previewProxyPartitionForProfile(profile: string | null | undefined): string {
+  return `${previewPartitionForProfile(profile)}--proxy`
+}
+
+/**
  * The FAMILY predicate: true for the launch jar and every per-profile sibling
  * jar, and NOTHING else. The GHSA will-attach gate and the throttle/ipc
  * plumbing admit exactly this family — the preload and admission rules are

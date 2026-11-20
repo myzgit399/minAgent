@@ -1449,6 +1449,38 @@ def test_lmstudio_bare_providers_block_does_not_hide_live_catalog(monkeypatch):
     assert row["source"] == "hermes"
 
 
+def test_user_provider_row_merges_plugin_curated_models():
+    """A `providers:<plugin>` entry that only pins `default_model` should still
+    offer the plugin's curated fallback_models in the picker, not a single row."""
+    from hermes_cli.model_switch_providers import _PickerBuild, _lap_user_provider_rows
+
+    b = _PickerBuild(
+        current_provider="wps_lingxi",
+        current_base_url="https://lingxi.kdocs.cn",
+        current_model="m1",
+        max_models=None,
+        for_picker=True,
+        force_fresh_nous_tier=False,
+        probe_custom_providers=False,
+        probe_current_custom_provider=False,
+        refresh=False,
+        excluded=set(),
+        curated={"wps_lingxi": ["m1", "m2", "m3"]},
+    )
+    _lap_user_provider_rows(b, {
+        "wps_lingxi": {
+            "api": "https://lingxi.kdocs.cn",
+            "api_key": "test-key",
+            "default_model": "m1",
+        },
+    })
+
+    rows = [row for row in b.results if row["slug"] == "wps_lingxi"]
+    assert len(rows) == 1
+    assert rows[0]["models"] == ["m1", "m2", "m3"]
+    assert rows[0]["total_models"] == 3
+
+
 def test_lmstudio_providers_block_with_explicit_endpoint_still_uses_section3(monkeypatch):
     """When `providers.lmstudio` sets its own base_url, the user has
     deliberately pointed the slug at a specific endpoint — the generic

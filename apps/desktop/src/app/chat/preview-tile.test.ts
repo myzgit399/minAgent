@@ -239,6 +239,36 @@ describe('preview tiles mirror the visible session tabs', () => {
 
   const browserTarget = (url: string) => ({ kind: 'url', label: url, source: url, url }) as const
 
+  it('boots onto the chat tab even when the restored layout had a Browser in front', async () => {
+    const preview = await import('@/store/preview')
+    const tree = await import('@/components/pane-shell/tree/store')
+    const model = await import('@/components/pane-shell/tree/model')
+    const { registry: panes } = await import('@/contrib/registry')
+    const { watchPreviewTiles: watch } = await import('./preview-tile')
+
+    panes.register({
+      area: 'panes',
+      data: { placement: 'main', uncloseable: true },
+      id: 'workspace',
+      render: () => null,
+      title: 'workspace'
+    })
+    // The tab the layout restored — pinned, so its pane is wanted in the tree.
+    preview.$previewTabs.set([{ id: 'url:boot', pinned: true, target: browserTarget('https://boot.example') }])
+    // A persisted layout that ended with that Browser in front of the chat zone.
+    tree.declareDefaultTree(
+      model.group(['workspace', 'preview-tile:url:boot'], { active: 'preview-tile:url:boot', id: 'grp-main' })
+    )
+    tree.watchContributedPanes()
+    watch()
+
+    const layout = tree.$layoutTree.get()!
+
+    expect(model.findGroup(layout, 'grp-main')?.active).toBe('workspace')
+    // The tab itself survives — only the front changes.
+    expect(preview.$previewTabs.get()).toHaveLength(1)
+  })
+
   it('unmounts only the longest-hidden live page past the cap, and reopens it on return', async () => {
     const { preview, session, tree } = await setup()
     const { registry } = await import('@/contrib/registry')
@@ -276,12 +306,12 @@ describe('preview tiles mirror the visible session tabs', () => {
     expect(tree.treePanesWithPrefix('preview-tile:')).toHaveLength(1)
   })
 
-  it('brings a session back with its previews beside the chat, not stacked over it', async () => {
+  it('brings a session back with its file previews beside the chat, not stacked over it', async () => {
     const { model, preview, session, tree } = await setup()
 
     session.$selectedStoredSessionId.set('sess-1')
-    preview.openPreview(browserTarget('https://a.example'))
     preview.openPreview(htmlTarget('/work/a.html'))
+    preview.openPreview(htmlTarget('/work/b.html'))
 
     session.$selectedStoredSessionId.set('sess-2')
     session.$selectedStoredSessionId.set('sess-1')
@@ -293,5 +323,38 @@ describe('preview tiles mirror the visible session tabs', () => {
     expect(previews).toHaveLength(2)
     expect(chat?.panes).toEqual(['workspace'])
     expect(new Set(previews.map(id => model.findGroupOfPane(layout, id)?.id)).size).toBe(1)
+  })
+
+  it('docks a browser tab into the workspace zone so it fills the chat, session-tab style', async () => {
+    const { model, preview, session, tree } = await setup()
+
+    session.$selectedStoredSessionId.set('sess-1')
+    preview.openPreview(browserTarget('https://a.example'))
+
+    const layout = tree.$layoutTree.get()!
+    const chat = model.findGroupOfPane(layout, 'workspace')
+    const browserId = preview.$previewTabs.get().find(tab => tab.target.kind === 'url')!.id
+
+    expect(tree.treePanesWithPrefix('preview-tile:')).toEqual([`preview-tile:${browserId}`])
+    // The browser is a tab of the chat zone, not a side-by-side split.
+    expect(chat?.panes).toContain(`preview-tile:${browserId}`)
+  })
+
+  it('keeps a file preview beside the chat even when a browser tab is already open in the workspace', async () => {
+    const { model, preview, session, tree } = await setup()
+
+    session.$selectedStoredSessionId.set('sess-1')
+    preview.openPreview(browserTarget('https://a.example'))
+    preview.openPreview(htmlTarget('/work/a.html'))
+
+    const layout = tree.$layoutTree.get()!
+    const chat = model.findGroupOfPane(layout, 'workspace')
+    const previews = tree.treePanesWithPrefix('preview-tile:')
+    const browserId = preview.$previewTabs.get().find(tab => tab.target.kind === 'url')!.id
+
+    // Browser tab landed in the chat zone; the file got its own zone beside it.
+    expect(chat?.panes).toContain(`preview-tile:${browserId}`)
+    expect(previews).toHaveLength(2)
+    expect(new Set(previews.map(id => model.findGroupOfPane(layout, id)?.id)).size).toBe(2)
   })
 })

@@ -164,16 +164,21 @@ export interface ModelMenuController {
    *  not a user editing one control — surfaces that write through to a session
    *  need to batch it. Values are already capability-gated by the menu. */
   applyPreset: (
-    preset: { effort?: string; fast?: boolean; serviceTier?: string },
+    preset: { effort?: string; fast?: boolean; proxy?: boolean; serviceTier?: string },
     row: { model: string; provider: string }
   ) => void
   current: ModelChoice
-  presetFor: (provider: string, model: string) => { effort?: string; fast?: boolean; serviceTier?: string }
+  presetFor: (provider: string, model: string) => {
+    effort?: string
+    fast?: boolean
+    proxy?: boolean
+    serviceTier?: string
+  }
   /** Commit a model row. Return false to abort (a failed session switch). */
   select: (model: string, provider: string) => Promise<boolean | void> | void
   /** Edit ONE option on a row. `isActive` says whether it's the current model. */
   setOptions: (
-    patch: { effort?: string; fast?: boolean; serviceTier?: string },
+    patch: { effort?: string; fast?: boolean; proxy?: boolean; serviceTier?: string },
     row: { isActive: boolean; model: string; provider: string }
   ) => void
 }

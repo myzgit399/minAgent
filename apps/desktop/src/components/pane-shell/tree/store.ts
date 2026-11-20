@@ -810,6 +810,10 @@ export function treePanesWithPrefix(prefix: string): string[] {
  *  An atom so the strip re-renders when the action becomes available. */
 export const $newSessionTabAction = atom<(() => void) | null>(null)
 
+/** The globe "+" beside the session "+": open a fresh in-app Browser tab.
+ *  Registered by app wiring so the generic strip stays browser-agnostic. */
+export const $newBrowserTabAction = atom<(() => void) | null>(null)
+
 /**
  * Keyboard slots (⌘1…⌘9, ⌃Tab) must index the SAME tabs the strip paints —
  * chrome-hidden panes (files in Focus layout), unregistered ones, and
@@ -1480,14 +1484,17 @@ function enforceDockedPanes(
       continue
     }
 
-    enforcedDocksThisBoot.add(pane.id)
-
     const from = findGroupOfPane(next, pane.id)
     const anchor = findGroupOfPane(next, dock.pane)
 
+    // A pane registered by a plugin that has not loaded yet has no anchor on
+    // this pass. Do NOT burn the once-per-boot token: the next adoption pass
+    // (plugin registration calls back into it) must be free to heal the pane.
     if (!from || !anchor) {
       continue
     }
+
+    enforcedDocksThisBoot.add(pane.id)
 
     if (dock.pos === 'center' && from.id === anchor.id) {
       // Already stacked with its anchor, and nothing to repair: the trees that

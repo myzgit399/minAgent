@@ -12,12 +12,16 @@ def _configure_ollama_num_ctx(agent, _model_cfg, _config_context_length):
     # model.ollama_num_ctx overrides; model.context_length caps the detected value (VRAM).
     agent._ollama_num_ctx: int | None = None
     _override = _model_cfg.get("ollama_num_ctx") if isinstance(_model_cfg, dict) else None
-    if _override is not None:
+    # num_ctx is served by a local Ollama, so a configured value is only meaningful there:
+    # forwarding it to a hosted endpoint injects ``options`` into the request body, which
+    # OpenAI-compatible servers such as Gemini's reject with HTTP 400 (unknown field).
+    _local = is_local_server(agent.base_url, agent.provider)
+    if _override is not None and _local:
         try:
             agent._ollama_num_ctx = int(_override)
         except (TypeError, ValueError):
             _ra().logger.debug("Invalid ollama_num_ctx config value: %r", _override)
-    if agent._ollama_num_ctx is None and is_local_server(agent.base_url, agent.provider):
+    if agent._ollama_num_ctx is None and _local:
         try:
             # api_key may be a callable (Entra token provider); detection needs a string.
             _key = agent.api_key if isinstance(agent.api_key, str) else ""

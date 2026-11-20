@@ -11,7 +11,8 @@ import {
   isPreviewGuestSession,
   isPreviewPartition,
   PREVIEW_GUEST_PARTITION,
-  previewPartitionForProfile
+  previewPartitionForProfile,
+  previewProxyPartitionForProfile
 } from './preview-guest-throttle'
 import { createStreamThrottle } from './stream-throttle'
 
@@ -42,6 +43,23 @@ describe('previewPartitionForProfile (P1-3)', () => {
       const expected = key === 'default' ? PREVIEW_GUEST_PARTITION : previewPartitionForProfile(key)
       expect(previewPartitionForProfile(name)).toBe(expected)
     }
+  })
+})
+
+describe('previewProxyPartitionForProfile (stable proxied jar)', () => {
+  it('is per-profile and STABLE — never keyed by a tab id', () => {
+    const jar = previewProxyPartitionForProfile('work')
+
+    expect(jar).toBe(`${previewPartitionForProfile('work')}--proxy`)
+    expect(jar).not.toMatch(/browser-|uuid|[0-9a-f]{8}-/)
+    // Same profile always resolves to one jar; sign-ins survive new tabs/restarts.
+    expect(previewProxyPartitionForProfile('work')).toBe(jar)
+  })
+
+  it('keeps the proxy jar inside the admitted preview family', () => {
+    expect(isPreviewPartition(previewProxyPartitionForProfile(null))).toBe(true)
+    expect(isPreviewPartition(previewProxyPartitionForProfile('work'))).toBe(true)
+    expect(previewProxyPartitionForProfile('work')).not.toBe(previewProxyPartitionForProfile('other'))
   })
 })
 

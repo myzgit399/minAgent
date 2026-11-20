@@ -252,6 +252,8 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
   }
 ]
 
+const WEB_HISTORY_DROPDOWN_ID = '__web_history_dropdown__' as const
+
 // Two modes via the `compact` height variant (styles.css):
 //   tall    → each section is shrink-0, capped, its own scroller; Sessions is flex-1.
 //   compact → COMPACT_FLAT drops the caps so the whole stack scrolls as one.

@@ -376,6 +376,53 @@ function MainModelDefaults({
   )
 }
 
+function ModelProxySettings({
+  config,
+  onSave
+}: {
+  config: Record<string, unknown> | null
+  onSave: (url: string) => Promise<void>
+}) {
+  const { t } = useI18n()
+  const m = t.settings.model
+  const configured = String(getNested(config ?? {}, 'model_proxy.url') ?? '')
+  const [draft, setDraft] = useState(configured)
+
+  useEffect(() => setDraft(configured), [configured])
+
+  return (
+    <div className="mt-6 grid gap-1">
+      <p className="mb-1 text-xs text-muted-foreground">{m.proxyTitle ?? 'Proxy'}</p>
+      <ListRow
+        action={
+          <Input
+            aria-label={m.proxyUrl ?? 'Proxy URL'}
+            autoComplete="off"
+            className={cn('min-w-0', CONTROL_TEXT, '@2xl:w-72')}
+            onChange={event => setDraft(event.target.value)}
+            onKeyDown={event => {
+              if (isSubmitEnter(event)) {
+                void onSave(draft.trim())
+              }
+            }}
+            placeholder={m.proxyPlaceholder ?? 'http://127.0.0.1:7890'}
+            value={draft}
+          />
+        }
+        title={m.proxyUrl ?? 'Proxy URL'}
+      />
+      <div className="flex justify-end pt-1">
+        <Button disabled={draft.trim() === configured} onClick={() => void onSave(draft.trim())} size="sm">
+          {t.common.save}
+        </Button>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {m.proxyHint ?? 'Enable a proxy per model from its options menu. Empty clears the proxy URL.'}
+      </p>
+    </div>
+  )
+}
+
 export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: ModelSettingsProps) {
   const { t } = useI18n()
   const m = t.settings.model
@@ -803,6 +850,26 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
     [config, m.defaultsFailed, scopeProfile, setConfig, writeScope]
   )
 
+  const writeProxyUrl = useCallback(
+    async (url: string) => {
+      if (!config) {
+        return
+      }
+
+      const prev = config
+      const next = setNested(config, 'model_proxy.url', url)
+      setConfig(next)
+
+      try {
+        await saveHermesConfig(setNested({}, 'model_proxy.url', url), writeScope ?? scopeProfile)
+      } catch (err) {
+        setConfig(prev)
+        notifyError(err, m.defaultsFailed)
+      }
+    },
+    [config, m.defaultsFailed, scopeProfile, setConfig, writeScope]
+  )
+
   // Paste an API key for the selected `api_key` provider, persist it, then
   // refresh so the now-authenticated provider's models populate. Auto-selects
   // the recommended default model so the user can Apply in one more click.
@@ -1182,6 +1249,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile, subpage }: Mod
               ultrafastSupported={ultrafastSupported}
             />
           )}
+          {config && <ModelProxySettings config={config} onSave={writeProxyUrl} />}
           {errorNotice}
           {switchStaleAux.length > 0 && (
             <div className="mt-2">

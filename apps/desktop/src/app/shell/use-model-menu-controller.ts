@@ -5,7 +5,7 @@ import { atom } from 'nanostores'
 import { useCallback, useEffect, useRef } from 'react'
 
 import { useSessionView } from '@/app/chat/session-view'
-import type { HermesGateway } from '@/hermes'
+import { saveHermesConfig, type HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 import { currentPickerSelection } from '@/lib/model-status-label'
@@ -19,7 +19,7 @@ import {
   modelPresetServiceTier,
   setModelPreset
 } from '@/store/model-presets'
-import { notify } from '@/store/notifications'
+import { notify, notifyError } from '@/store/notifications'
 import { $defaultReasoningEffort, markComposerSelectionManual } from '@/store/session'
 
 import type { ModelMenuController } from './model-catalog-menu'
@@ -130,7 +130,20 @@ export function useModelMenuController({
     }
   }, [daybreakListed, ownerConnectionId, profile])
 
+  const persistProxy = (provider: string, model: string, enabled: boolean) => {
+    // The menu's preset is local; the backend needs the same choice in config
+    // before the next client is built. Sparse PUT deep-merges into config.yaml.
+    void saveHermesConfig(
+      { model_proxy: { models: { [modelPresetKey(provider, model)]: enabled } } },
+      profile
+    ).catch(err => notifyError(err, t.shell.modelOptions.updateFailed))
+  }
+
   const patchPreset = (patch: ModelPreset, row: { model: string; provider: string }, failMessage: string) => {
+    if (patch.proxy !== undefined) {
+      persistProxy(row.provider, row.model, patch.proxy)
+    }
+
     const dimensions = [
       ...(patch.effort !== undefined ? ['effort' as const] : []),
       ...(modelPresetServiceTier(patch) !== undefined ? ['speed' as const] : [])
@@ -257,6 +270,10 @@ export function useModelMenuController({
       // Non-active edits stay preset-only — no model switch, no session write.
       if (!row.isActive) {
         setModelPreset(row.provider, row.model, patch)
+
+        if (patch.proxy !== undefined) {
+          persistProxy(row.provider, row.model, patch.proxy)
+        }
 
         // Invalidate a pending rollback for the same globally remembered dimension.
         if (patch.effort !== undefined) {

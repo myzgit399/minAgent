@@ -17,12 +17,17 @@ a supervisor (systemd/launchd/Desktop/external) or started without ``--idle-exit
 ``hermes gateway run`` by hand, ``hermes gateway ensure`` from Desktop) never arms this. The exit
 publishes ``draining`` with ``drain_reason: idle_exit`` before anything else, so a client that races it
 waits for the process to go and starts a fresh one instead of failing.
+
+A daemon started for a host (``gateway ensure --host-pid/--host-kind``: Desktop, a CLI/TUI) also ends
+when that host process does (:func:`host_exit_watcher`), so the gateway follows the application that
+started it instead of outliving a crash or a force-quit.
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import logging
+import os
 import sqlite3
 import time
 from pathlib import Path
@@ -279,4 +284,76 @@ def arm_unmanaged_idle_exit(runner) -> bool:
         return False
     note_client_activity(runner)
     runner._spawn_supervised(lambda: unmanaged_idle_exit_watcher(runner), "unmanaged_idle_exit_watcher")
+    return True
+
+
+# ``drain_reason`` a daemon publishes when the host that started it exits: a client racing the exit
+# reads it as "the owner is leaving by itself" and starts the fresh one instead of refusing.
+HOST_EXIT_REASON = "host_exit"
+HOST_EXIT_STOP_PREFIX = "gateway started for a host that exited"
+_HOST_POLL_SECONDS = 1.0
+
+
+def requested_host_pid() -> int | None:
+    """The host (``<kind>:<pid>``, :data:`hermes_cli.gateway_runtime_start.HOST_PID_ENV`) this daemon
+    was started for, or None."""
+    from hermes_cli.gateway_runtime_start import HOST_PID_ENV
+    kind, _, pid = os.environ.get(HOST_PID_ENV, "").partition(":")
+    return int(pid) if kind and pid.isdigit() else None
+
+
+def _host_alive(pid: int) -> bool:
+    from hermes_cli._subprocess_compat import pid_exists_stdlib
+    return pid_exists_stdlib(pid)
+
+
+def _begin_host_exit(runner, pid: int) -> None:
+    """The requesting host is gone: stop serving rather than outlive the application.
+
+    Publishes ``draining``/``host_exit`` synchronously, as the idle exit does, so a client that races
+    this exit waits for the process to go and starts a fresh gateway instead of reading a refusal.
+    """
+    logger.info("Exiting: the host that started this gateway (pid %d) exited; the next host starts a fresh one",
+                pid)
+    runner._draining = True
+    runner._exit_reason = f"{HOST_EXIT_STOP_PREFIX} (pid {pid})"
+    descriptor = getattr(runner, "session_runtime_descriptor", None)
+    if descriptor is not None:
+        descriptor.update(state="draining", capabilities=[], drain_reason=HOST_EXIT_REASON)
+    # ``stop`` is ``_stop_impl`` itself: a shield keeps a cancelling watcher (shutdown, a test) from
+    # tunnelling into the teardown it runs — same reason ``GatewayRunner.stop`` awaits it that way.
+    runner._idle_exit_stop_task = asyncio.ensure_future(asyncio.shield(runner.stop()))
+
+
+async def host_exit_watcher(runner, pid: int) -> None:
+    """End the gateway once the host ``pid`` that asked for it is gone, whatever stopped the host.
+
+    The orderly path is still ``gateway host-release`` (Desktop's quit, a CLI's context exit): it stops
+    the gateway and waits for the exit. This covers the ways that handoff never runs — a crash, a
+    force-quit, a killed terminal — and is the only stop a job-bound Windows daemon gets.
+    """
+    while runner._running and not runner._draining:
+        await asyncio.sleep(_HOST_POLL_SECONDS)
+        try:
+            alive = await asyncio.to_thread(_host_alive, pid)
+        except Exception:
+            logger.debug("host liveness probe for pid %d failed; staying up", pid, exc_info=True)
+            continue  # unreadable: the release handoff remains the stop, as before
+        if not alive:
+            _begin_host_exit(runner, pid)
+            return
+
+
+def arm_host_exit(runner, pid: int | None = None) -> bool:
+    """Arm :func:`host_exit_watcher` for a daemon started for a host. Returns whether it armed."""
+    pid = requested_host_pid() if pid is None else pid
+    if pid is None:
+        return False
+    if pid == os.getpid():
+        return False  # the launcher reused our pid name for another process: never our host
+    if not _host_alive(pid):
+        # Started by a host that already exited (a launcher that crashed between spawn and return).
+        _begin_host_exit(runner, pid)
+        return True
+    runner._spawn_supervised(lambda: host_exit_watcher(runner, pid), "host_exit_watcher")
     return True

@@ -53,6 +53,7 @@ export function ReasoningMenuPanel(props: ModelMenuHostProps) {
       model={model}
       onSelectModel={nextModel => controller.select(nextModel, provider)}
       onSetOptions={patch => controller.setOptions(patch, row)}
+      proxy={controller.presetFor(provider, model).proxy ?? false}
       provider={provider}
       reasoning={caps?.reasoning ?? true}
       serviceTier={controller.current.serviceTier}

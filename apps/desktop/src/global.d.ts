@@ -343,6 +343,103 @@ declare global {
       }) => Promise<{ canceled?: boolean; path?: string; saved: boolean }>
       writeClipboard: (text: string) => Promise<boolean>
       readClipboard: () => Promise<string>
+      // xGrok PTY: the real Grok Build TUI in a pseudo-terminal (full TUI parity).
+      xgrokPtyAvailable: () => Promise<boolean>
+      xgrokPtyExe: () => Promise<{ exe: string; bundled: boolean } | null>
+      xgrokPtyStart: (config: {
+        tabId: string
+        cwd?: string
+        model?: string
+        effort?: string
+        proxyUrl?: string
+        newSession?: boolean
+        cols?: number
+        rows?: number
+      }) => Promise<{ ok: boolean; error?: string; id?: string; exe?: string; bundled?: boolean }>
+      xgrokPtyWrite: (id: string, data: string) => Promise<boolean>
+      xgrokPtyResize: (id: string, size: { cols: number; rows: number }) => Promise<boolean>
+      xgrokPtyDispose: (id: string) => Promise<boolean>
+      xgrokPtySwitchModel: (payload: {
+        id: string
+        model: string
+        proxyUrl?: string
+      }) => Promise<{ ok: boolean; mode?: 'switched' | 'restart'; error?: string }>
+      xgrokModelCatalog: () => Promise<{
+        available: boolean
+        groups: Array<{
+          id: string
+          label: string
+          models: Array<{
+            id: string
+            label: string
+            group: string
+            groupLabel: string
+            mappedTo?: string
+            baseUrl?: string
+            ready?: boolean
+            blockedBy?: string
+            proxyEnabled: boolean
+          }>
+        }>
+        models: Array<{
+          id: string
+          label: string
+          group: string
+          groupLabel: string
+          mappedTo?: string
+          baseUrl?: string
+          ready?: boolean
+          blockedBy?: string
+          proxyEnabled: boolean
+        }>
+        defaultModel: string
+        proxyUrl: string
+        source: string
+        error?: string
+      }>
+      xgrokModelProxy: (payload: { provider: string; id: string; enabled: boolean }) => Promise<{ ok: boolean; error?: string }>
+      xgrokModelProxyState: () => Promise<{ url: string; models: Record<string, boolean> }>
+      onXGrokPtyData: (tabId: string, callback: (data: string) => void) => () => void
+      onXGrokPtyExit: (
+        tabId: string,
+        callback: (payload: { sessionId?: string; code: number | null; signal: string | null }) => void
+      ) => () => void
+      xgrokAvailable: () => Promise<boolean>
+      xgrokVersion: () => Promise<string>
+      xgrokModels: () => Promise<{
+        available: boolean
+        defaultModel: string
+        models: Array<{
+          id: string
+          label: string
+          provider: string
+          mappedTo?: string
+          ready?: boolean
+          blockedBy?: string
+          efforts?: string[]
+        }>
+        source?: string
+        error?: string
+      }>
+      xgrokRun: (config: {
+        tabId: string
+        prompt: string
+        apiKey?: string
+        model: string
+        effort?: string
+        proxyUrl: string
+        /** `false` forces a direct connection; unset/`true` uses the host's resolution. */
+        useProxy?: boolean
+        cwd: string
+        yolo?: boolean
+        resume?: string
+        continueLast?: boolean
+      }) => Promise<{ ok: boolean; error?: string }>
+      xgrokCancel: (tabId: string) => Promise<boolean>
+      onXGrokLine: (callback: (event: { tabId: string; line: string }) => void) => () => void
+      onXGrokDone: (
+        callback: (event: { tabId: string; ok: boolean; error?: string; sessionId?: string }) => void
+      ) => () => void
       saveGatewayFile?: (payload: {
         connectionId?: null | string
         path: string
@@ -651,6 +748,13 @@ declare global {
         write: (id: string, data: string) => Promise<boolean>
       }
       reachPreviewUrl?: (url: string) => Promise<string>
+      /** Route one in-app browser partition through the configured proxy. */
+      setPreviewTabProxy?: (request: {
+        partition: string
+        enabled: boolean
+        proxyUrl?: string
+      }) => Promise<{ ok: boolean }>
+      getPreviewWpsSid?: (request: { partition: string; url: string }) => Promise<string>
       // Real-profile sign-ins for the in-app browser: main reads them from the backend host's real-profile
       // browser and sets them on the preview partition. Counts only, never a cookie.
       syncPreviewSignins?: (request: {

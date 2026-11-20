@@ -557,6 +557,11 @@ class ModelOptionProvider(OpenModel):
     featured_models: list[str] | None = None
     capabilities: dict[str, ModelCapabilities] | None = None
     pricing: dict[str, ModelPricing] | None = None
+    # DashScope / 百炼 rows: token-cost 倍数 per model vs ``token_multiplier_basis`` (the model
+    # quoted as 1×, e.g. qwen-plus). ``token_multiplier_labels`` carries the pre-formatted "×N".
+    token_multipliers: dict[str, float] | None = None
+    token_multiplier_labels: dict[str, str] | None = None
+    token_multiplier_basis: str | None = None
     pricing_pending: bool | None = None
     free_tier: bool | None = None
     free_tier_pending: bool | None = None

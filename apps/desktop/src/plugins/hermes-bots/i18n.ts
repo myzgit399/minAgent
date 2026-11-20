@@ -481,6 +481,13 @@ const en: BotsMessages = {
     runsInterval: (count, unit) => `Runs every ${count} ${unit}`,
     runsRaw: 'Raw schedule — every Nm/Nh/Nd or 5-field cron',
     timesTotal: count => `, ${count} time(s) total`
+  },
+  programming: {
+    newGrok: 'New grok',
+    projects: 'Projects',
+    empty: 'No grok sessions yet',
+    openFailed: 'Could not open that grok session.',
+    entryHint: 'Embedded grok-build engine'
   }
 }
 
@@ -924,6 +931,13 @@ const ja: BotsMessages = {
     runsInterval: (count, unit) => `${count}${unit}ごとに実行します`,
     runsRaw: '生のスケジュール — Nm/Nh/Nd または5フィールドのcron',
     timesTotal: count => `、合計${count}回`
+  },
+  programming: {
+    newGrok: '新規 grok',
+    projects: 'プロジェクト',
+    empty: 'grok セッションはまだありません',
+    openFailed: 'この grok セッションを開けませんでした。',
+    entryHint: '内蔵 grok-build エンジン'
   }
 }
 
@@ -1350,6 +1364,13 @@ const zh: BotsMessages = {
     runsInterval: (count, unit) => `每 ${count} ${unit}运行`,
     runsRaw: '原始计划 — every Nm/Nh/Nd 或 5 段 cron',
     timesTotal: count => `，共 ${count} 次`
+  },
+  programming: {
+    newGrok: '新 grok',
+    projects: '项目',
+    empty: '暂无 grok 会话',
+    openFailed: '无法打开该 grok 会话。',
+    entryHint: '内嵌 grok-build 引擎'
   }
 }
 
@@ -1776,6 +1797,13 @@ const zhHant: BotsMessages = {
     runsInterval: (count, unit) => `每 ${count} ${unit}執行`,
     runsRaw: '原始排程 — every Nm/Nh/Nd 或 5 段 cron',
     timesTotal: count => `，共 ${count} 次`
+  },
+  programming: {
+    newGrok: '新 grok',
+    projects: '專案',
+    empty: '尚無 grok 工作階段',
+    openFailed: '無法開啟該 grok 工作階段。',
+    entryHint: '內嵌 grok-build 引擎'
   }
 }
 

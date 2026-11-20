@@ -509,7 +509,7 @@
     --composer-shell-pad-block-end: 0.625rem;
     --message-text-indent: 0.75rem;
     --conversation-text-base-size: 0.8125rem;
-    --conversation-tool-base-size: 0.6875rem;
+    --conversation-tool-base-size: 0.8125rem;
     --conversation-caption-base-size: 0.75rem;
     --conversation-base-line-height: 1.125rem;
     --conversation-caption-base-line-height: 1rem;
@@ -4267,3 +4267,163 @@ html[data-hermes-desktop-host='browser'] [data-slot='sidebar-container'] {
   background: none;
   color: var(--err-ink);
 }
+
+/* ---------- xGrok (embedded grok-build engine) ---------- */
+/* The engine lives inside a workspace pane, so the root fills its tab body
+   instead of covering the window (it used to be a floating overlay). */
+.xgrok-root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #eaeaea;
+  font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+}
+.xgrok-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-bottom: 1px solid #262626;
+  background: #080808;
+  font-size: 12px;
+}
+.xgrok-title { display: flex; align-items: center; gap: 6px; font-weight: 700; color: #fff; }
+.xgrok-badge { border: 1px solid #3a3a3a; border-radius: 10px; padding: 1px 8px; color: #9a9a9a; font-size: 10px; }
+.xgrok-model { color: #8a8a8a; }
+.xgrok-spacer { flex: 1; }
+.xgrok-icon-btn { border: 1px solid transparent; background: transparent; color: #9a9a9a; border-radius: 5px; padding: 4px 7px; }
+.xgrok-icon-btn:hover { color: #fff; border-color: #3a3a3a; background: #141414; }
+.xgrok-settings { display: flex; align-items: flex-end; gap: 12px; padding: 10px; border-bottom: 1px solid #262626; background: #0a0a0a; font-size: 11px; color: #9a9a9a; }
+.xgrok-settings label { display: flex; flex-direction: column; gap: 4px; }
+.xgrok-settings input { background: #000; border: 1px solid #3a3a3a; border-radius: 5px; color: #eaeaea; padding: 6px 8px; font-family: inherit; font-size: 12px; outline: none; min-width: 280px; }
+.xgrok-warning { padding: 8px 12px; background: #1a1400; color: #d8b84b; font-size: 11px; border-bottom: 1px solid #3a3010; }
+.xgrok-warning code { color: #fff; }
+.xgrok-output { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; background: #000; color: #fff; font-size: 13px; line-height: 1.5; }
+/* Model picker docked at the right end of the Grok CLI composer. */
+/* Vertically centered in grok's bottom status strip, immediately to the LEFT
+   of the right-aligned "Signed in with API key" — clear of the input line. */
+.xgrok-model-dock { position: absolute; right: 178px; bottom: 16px; z-index: 20; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.xgrok-toast { position: absolute; right: 12px; top: 8px; z-index: 30; padding: 4px 10px; border-radius: 5px; background: #1c1c1c; border: 1px solid #4a4a4a; color: #d8d8d8; font-size: 11px; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+.xgrok-model-notice { padding: 3px 8px; border-radius: 5px; background: #1c1c1c; border: 1px solid #3a3a3a; color: #b9b9b9; font-size: 10px; }
+.xgrok-proxy-setting { display: flex; align-items: center; gap: 6px; padding: 6px 9px; border-bottom: 1px solid #2c2c2c; color: #7a7a7a; }
+.xgrok-proxy-setting input { flex: 1; min-width: 0; background: #1c1c1c; border: 1px solid #3a3a3a; border-radius: 4px; outline: none; color: #eaeaea; font-family: inherit; font-size: 11px; padding: 3px 6px; }
+.xgrok-proxy-setting input:focus { border-color: #6a6a6a; }
+.xgrok-proxy-setting button { background: #2b2b2b; border: 1px solid #4a4a4a; border-radius: 4px; color: #ddd; font-family: inherit; font-size: 11px; padding: 3px 9px; cursor: pointer; }
+.xgrok-proxy-setting button:hover { background: #3a3a3a; }
+.xgrok-model-pill { display: flex; align-items: center; gap: 5px; padding: 1px 6px; border-radius: 4px; border: 1px solid transparent; background: transparent; color: #9a9a9a; font-family: inherit; font-size: 11px; line-height: 1.4; cursor: pointer; }
+.xgrok-model-pill:hover, .xgrok-model-pill.is-open { border-color: #4a4a4a; background: #1e1e1e; color: #eaeaea; }
+.xgrok-model-pill .codicon { font-size: 12px; }
+.xgrok-model-menu { position: absolute; right: 0; bottom: 28px; width: 340px; max-height: 420px; display: flex; flex-direction: column; border-radius: 8px; border: 1px solid #3a3a3a; background: #141414; box-shadow: 0 8px 30px rgba(0,0,0,.6); overflow: hidden; }
+.xgrok-model-search { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-bottom: 1px solid #2c2c2c; color: #9a9a9a; }
+.xgrok-model-search input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #eaeaea; font-family: inherit; font-size: 12px; }
+.xgrok-model-search button { background: transparent; border: none; color: #9a9a9a; cursor: pointer; padding: 2px; }
+.xgrok-model-search button:hover { color: #fff; }
+.xgrok-model-list { overflow-y: auto; padding: 4px 0; }
+.xgrok-model-list::-webkit-scrollbar { width: 8px; }
+.xgrok-model-list::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+.xgrok-model-group-title { padding: 6px 11px 3px; color: #7a7a7a; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.xgrok-model-row { display: flex; align-items: center; }
+.xgrok-model-row:hover { background: #1e1e1e; }
+.xgrok-model-row.is-active { background: #1a2a1a; }
+.xgrok-model-select { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 6px 10px; background: transparent; border: none; color: #ddd; font-family: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.xgrok-model-select:disabled { opacity: .45; cursor: not-allowed; }
+.xgrok-model-name { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xgrok-model-id { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6f6f6f; font-size: 10px; }
+.xgrok-model-proxy { flex: 0 0 auto; margin-right: 8px; padding: 3px 6px; background: transparent; border: 1px solid transparent; border-radius: 5px; color: #6f6f6f; cursor: pointer; }
+.xgrok-model-proxy:hover { border-color: #4a4a4a; color: #ccc; }
+.xgrok-model-proxy.is-on { color: #4ec9b0; }
+.xgrok-model-empty { padding: 14px 11px; color: #7a7a7a; font-size: 11px; }
+.xgrok-output::-webkit-scrollbar { width: 8px; }
+.xgrok-output::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+.xgrok-banner { color: #fff; line-height: 1.1; font-size: 12px; white-space: pre; }
+.xgrok-line { white-space: pre-wrap; word-break: break-word; color: #ededed; }
+.xgrok-line-thought { color: #9a9a9a; font-style: italic; }
+.xgrok-line-tool { color: #cfcfcf; }
+.xgrok-line-result { color: #bdbdbd; }
+.xgrok-line-error { color: #ff6b6b; }
+.xgrok-running { color: #fff; animation: xgrok-blink 1s steps(2) infinite; }
+@keyframes xgrok-blink { 50% { opacity: .35; } }
+.xgrok-composer { position: relative; display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; margin: 8px 12px 0; border: 1px solid #3a3a3a; border-radius: 8px; background: #000; padding: 8px 10px; }
+.xgrok-composer:focus-within { border-color: #666; }
+.xgrok-composer textarea { flex: 1 1 100%; resize: none; border: none; outline: none; background: transparent; color: #eaeaea; font-family: inherit; font-size: 13px; line-height: 1.5; min-height: 22px; max-height: 160px; }
+.xgrok-composer textarea::placeholder { color: #555; }
+.xgrok-send { border: 1px solid #3a3a3a; background: #fff; color: #000; font-weight: 700; font-size: 12px; padding: 6px 14px; border-radius: 6px; }
+.xgrok-send:disabled { background: #222; color: #666; border-color: #222; cursor: default; }
+/* model / reasoning-effort pills live under the textarea, inside the composer */
+.xgrok-pills { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.xgrok-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 15rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid #2e2e2e;
+  background: #0a0a0a;
+  color: #bdbdbd;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: inherit;
+}
+.xgrok-pill:hover { color: #fff; border-color: #4a4a4a; background: #141414; }
+/* The 代理 switch reads as a switch: a lit pill when egress goes through the
+   proxy, the default chrome when the tab is direct. */
+.xgrok-pill.is-active { color: #fff; border-color: #4f7cff; background: #101a33; }
+.xgrok-pill.is-active .codicon { opacity: 1; }
+.xgrok-pill .codicon { font-size: 11px; opacity: .8; }
+/* popovers open upward from the composer's bottom row */
+.xgrok-pill-menu,
+.xgrok-slash-menu {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 6px);
+  max-height: 16rem;
+  overflow-y: auto;
+  z-index: 40;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  background: #050505;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .7);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.xgrok-slash-menu { left: 10px; right: auto; min-width: 14rem; }
+.xgrok-pill-menu button,
+.xgrok-slash-menu button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: #d8d8d8;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 5px;
+}
+.xgrok-pill-menu button em,
+.xgrok-slash-menu button em { color: #6f6f6f; font-style: normal; font-size: 11px; }
+.xgrok-pill-menu button:hover,
+.xgrok-slash-menu button:hover { background: #1a1a1a; color: #fff; }
+.xgrok-pill-menu button.is-active { background: #141414; color: #fff; }
+.xgrok-pill-menu button.is-unready { opacity: .5; cursor: not-allowed; }
+.xgrok-pill-menu button.is-unready:disabled { pointer-events: auto; }
+.xgrok-pill-menu button.is-unready:disabled:hover { background: transparent; }
+.xgrok-pill-menu button.is-unready em { color: #d98a5a; }
+.xgrok-pill-menu button.is-active::after { content: '✓'; color: #7ddc7d; font-size: 11px; }
+.xgrok-hint { margin: 6px 14px 10px; color: #4e4e4e; font-size: 11px; }

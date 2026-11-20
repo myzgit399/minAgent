@@ -1,4 +1,4 @@
-"""Real local-control and subprocess boundaries, never real service mutations."""
+﻿"""Real local-control and subprocess boundaries, never real service mutations."""
 import asyncio
 import json
 import os
@@ -729,3 +729,54 @@ def test_a_root_that_refuses_after_the_profile_joined_it_parks_the_profile(fast_
     monkeypatch.setattr(progress, "_cpu_seconds", lambda pid: time.monotonic())  # the root keeps burning CPU
     result = runtime.ensure_gateway_runtime(tmp_path / "profile")
     assert (result.state, result.reason_code, result.detail) == ("inaccessible", "profile_parked", "standalone")
+
+
+def _payload(tmp_path, **extra):
+    """The identify payload of a live owner of ``tmp_path/profile``, as the control socket builds it."""
+    home = tmp_path / "profile"
+    home.mkdir(mode=0o700)
+    return home, {"runtime_protocol": 1, "state": "draining", "instance_id": "peer",
+                  "served_profiles": [{"profile_id": str(home), "home": str(home)}],
+                  "authority_epoch": 1, "api_origin": "http://127.0.0.1:5000", "supervisor": "none",
+                  "capabilities": ["session-authority-v1"], **extra}
+
+
+@pytest.mark.parametrize("reason", ["idle_exit", "host_exit"])
+def test_a_retiring_owner_names_why_so_a_client_waits_it_out(tmp_path, reason):
+    """An owner leaving by itself (idle, or the host that started it exited) must read as retiring:
+    ensure then waits for it to go and starts the fresh owner instead of refusing the client."""
+    from hermes_cli import gateway_runtime as runtime
+
+    home, payload = _payload(tmp_path, drain_reason=reason)
+
+    verdict = runtime._endpoint(payload, home)
+
+    assert (verdict.state, verdict.reason_code) == ("draining", reason)
+    assert reason in runtime._RETIRING
+
+
+def test_an_unnamed_drain_is_not_mistaken_for_a_retiring_owner(tmp_path):
+    from hermes_cli import gateway_runtime as runtime
+
+    home, payload = _payload(tmp_path, state="draining")
+
+    assert runtime._endpoint(payload, home) == runtime.GatewayDiscovery("draining")
+
+
+def test_a_requested_host_reaches_the_spawned_daemon(tmp_path, monkeypatch):
+    """The host is launch metadata for the daemon, not the multiplexer root ensure may pick as target:
+    a daemon it starts must be told whose request it answers, or it outlives the application."""
+    from hermes_cli import gateway_runtime as runtime, gateway_runtime_service as service, gateway_runtime_start as start
+
+    root = tmp_path / ".hermes"
+    home = root / "profiles" / "alpha"
+    home.mkdir(parents=True, mode=0o700)
+    spawned = []
+    monkeypatch.setattr(runtime, "discover_gateway_endpoint", lambda *a, **k: runtime.GatewayDiscovery("absent"))
+    monkeypatch.setattr(service, "discover_existing_gateway_service", lambda *a, **k: None)
+    monkeypatch.setattr(start, "spawn_unmanaged_gateway",
+                        lambda target, **k: spawned.append((Path(target), k.get("host"))))
+
+    runtime.ensure_gateway_runtime(home, timeout=0.3, host="gui:4242")
+
+    assert spawned == [(root.resolve(), "gui:4242")]

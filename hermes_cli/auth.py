@@ -1224,14 +1224,26 @@ def _slot_selects(slot: Any, normalized: str) -> bool:
 
 
 def _config_selects_provider(normalized: str) -> bool:
-    """config.yaml ``model.provider``, or a MoA advisor/aggregator slot naming the provider.
+    """config.yaml ``model.provider``, a MoA slot, or an explicit ``providers:<id>`` entry.
 
     MoA presets are explicit model selections too: ``provider: anthropic`` in a MoA slot opts into
     Anthropic credentials for that slot even when the main model is another provider; otherwise
     Claude Code OAuth entries get pruned by ``load_pool("anthropic")`` and MoA advisors fail with
-    "no ANTHROPIC_API_KEY" while the picker says Anthropic is logged in."""
-    from hermes_cli.config import load_config
+    "no ANTHROPIC_API_KEY" while the picker says Anthropic is logged in. An explicit ``providers:``
+    row is equally deliberate (a plugin provider may still be waiting for its env credential), and
+    must not be hidden from the desktop picker just because the env var is not set yet."""
+    from hermes_cli.config import load_config, read_raw_config
     cfg = load_config()
+    raw_providers = read_raw_config().get("providers")
+    if isinstance(raw_providers, dict):
+        for key, entry in raw_providers.items():
+            if str(key or "").strip().lower() == normalized:
+                return True
+            if isinstance(entry, dict) and any(
+                str(entry.get(field) or "").strip().lower() == normalized
+                for field in ("provider", "name")
+            ):
+                return True
     if _slot_selects(cfg.get("model"), normalized):
         return True
     # ``auxiliary.<task>.provider: <id>`` selects the provider for that task the same way a MoA

@@ -148,6 +148,27 @@ export function installBrowserDesktopBridge(): boolean {
 
   const bridge: Window['hermesDesktop'] = {
     ...BROWSER_BRIDGE_STUBS,
+    // xGrok FFI bridge is native-desktop only; no-op in the browser build.
+    xgrokAvailable: async () => false,
+    xgrokVersion: async () => 'unavailable',
+    xgrokModels: async () => ({ available: false, defaultModel: '', models: [] }),
+    xgrokRun: async () => ({ ok: false, error: 'xGrok 仅在桌面端可用' }),
+    xgrokCancel: async () => false,
+    onXGrokLine: () => () => {},
+    onXGrokDone: () => () => {},
+    // xGrok PTY (real Grok Build TUI) is native-desktop only; no-op in browser.
+    xgrokPtyAvailable: async () => false,
+    xgrokPtyExe: async () => null,
+    xgrokPtyStart: async () => ({ ok: false, error: 'xGrok TUI 仅在桌面端可用' }),
+    xgrokPtyWrite: async () => false,
+    xgrokPtyResize: async () => false,
+    xgrokPtyDispose: async () => false,
+    xgrokPtySwitchModel: async () => ({ ok: false }),
+    xgrokModelCatalog: async () => ({ available: false, groups: [], models: [], defaultModel: '', proxyUrl: '', source: '' }),
+    xgrokModelProxy: async () => ({ ok: false }),
+    xgrokModelProxyState: async () => ({ url: '', models: {} }),
+    onXGrokPtyData: () => () => {},
+    onXGrokPtyExit: () => () => {},
     ...createBrowserClipboardBridge({ saveBuffer: uploads.saveImageBuffer }),
     ...createBrowserConnectionBridge({ api, bootstrap, relays }),
     ...(relays ? { connections: relays.connections } : {}),

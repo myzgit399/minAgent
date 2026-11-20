@@ -1,7 +1,7 @@
 import { randomUuid } from '@hermes/shared'
 import { atom, computed } from 'nanostores'
 
-import { dismissTreePane, isPaneVisible } from '@/components/pane-shell/tree/store'
+import { dismissTreePane, isPaneVisible, revealTreePane } from '@/components/pane-shell/tree/store'
 import {
   capturePreviewAnnotateDestination,
   clearPreviewAnnotateDestination,
@@ -97,6 +97,10 @@ export interface PreviewTab {
    *  workspace. Everything else is visible only in the session that owns it.
    *  Always written by this build, so a missing flag marks a legacy row. */
   pinned?: boolean
+  /** Route this browser tab through the configured `model_proxy.url`.
+   *  Proxy tabs get their own Electron partition so the proxy cannot leak
+   *  into a direct tab's cookie jar or network stack. */
+  proxy?: boolean
 }
 
 const TABS_STORAGE_KEY = 'hermes.desktop.previewTabs.v2'
@@ -1067,8 +1071,9 @@ export function toggleBrowserTab() {
   openBrowserTab()
 }
 
-/** Another Browser, always — the strip's "+". */
-export function newBrowserTab() {
+/** Another Browser, always — the strip's "+". Returns the new tab's id so a
+ *  caller can front the pane the mirror is about to create for it. */
+export function newBrowserTab(): RightRailTabId {
   const id = mintBrowserTabId()
 
   recordFeatureUse('browser_pane')
@@ -1078,6 +1083,60 @@ export function newBrowserTab() {
   ])
   noteExplicitPreviewOpen(id)
   selectRightRailTab(id)
+  // The pane only exists once the mirror has run for this tab — reveal on the
+  // next microtask, otherwise the click leaves focus on whatever minted it
+  // (the 网页 pane's Go, ⌘T) with no page in sight.
+  queueMicrotask(() => revealTreePane(`${PREVIEW_TILE_PREFIX}:${id}`))
+
+  return id
+}
+
+/** Tab-strip label for a URL: the host, else whatever the URL does say. */
+function browserTabLabel(url: string): string {
+  try {
+    const parsed = new URL(url)
+
+    return parsed.host || parsed.protocol.replace(':', '') || url
+  } catch {
+    return url
+  }
+}
+
+/** Open `url` in a NEW Browser tab placed directly AFTER `afterTabId` in the
+ *  strip (else at the end) and front it.
+ *
+ *  The preview guest's `_blank` hand-off lands here. That hand-off used to go
+ *  to `openExternal`, so a link inside the Browser left for the system browser
+ *  and yanked the reader out of the workspace; a tab beside the one that
+ *  spawned it keeps them where they were. Always a NEW tab — `openPreview`
+ *  reuses the current Browser for a navigated URL, but a clicked link is a
+ *  departure, not a re-target of the page you were reading. */
+export function openBrowserLinkInNewTab(url: string, afterTabId?: null | string): null | RightRailTabId {
+  const href = url.trim()
+
+  if (!href) {
+    return null
+  }
+
+  const tabs = $previewTabs.get()
+  const id = mintBrowserTabId()
+  const tab: PreviewTab = {
+    id,
+    pinned: false,
+    sessionId: currentSessionId($focusedStoredSessionId.get()) ?? undefined,
+    target: { kind: 'url', label: browserTabLabel(href), source: href, url: href }
+  }
+  const at = afterTabId ? tabs.findIndex(item => item.id === afterTabId) : -1
+
+  // Right after the spawning tab, not at the end of the strip: "opened from
+  // this tab" stays legible even with a dozen tabs open.
+  $previewTabs.set(at === -1 ? [...tabs, tab] : [...tabs.slice(0, at + 1), tab, ...tabs.slice(at + 1)])
+  recordFeatureUse('browser_pane')
+  // Stamp first, then select: `reveal` fronts a pane only for an explicit open.
+  noteExplicitPreviewOpen(id)
+  selectRightRailTab(id)
+
+  return id
 }
 
 /** Pin or unpin a preview tab. Pinned tabs render in EVERY session — the
@@ -1092,6 +1151,15 @@ export function setPreviewTabPinned(tabId: string, pinned: boolean): void {
       .map(tab =>
         tab.id === tabId ? { ...tab, pinned, sessionId: tab.sessionId ?? (pinned ? undefined : currentSession) } : tab
       )
+  )
+}
+
+/** Switch one browser tab between the configured proxy and a direct route.
+ *  The flag is persisted with the tab; the webview remounts because the tile's
+ *  render key includes the route. */
+export function setPreviewTabProxy(tabId: string, enabled: boolean): void {
+  $previewTabs.set(
+    $previewTabs.get().map(tab => (tab.id === tabId ? { ...tab, proxy: Boolean(enabled) } : tab))
   )
 }
 

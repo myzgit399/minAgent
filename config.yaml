@@ -15,5 +15,14 @@ providers:
     transport: chat_completions
     default_model: deepseek-flash
 
+  # Aliyun (阿里云百炼 / DashScope) — mainland China compatible-mode endpoint.
+  # The key lives in ALI_KEY; the `aliyun` provider profile
+  # (plugins/model-providers/aliyun) supplies the same base URL and catalog.
+  aliyun:
+    api: https://dashscope.aliyuncs.com/compatible-mode/v1
+    key_env: ALI_KEY
+    transport: chat_completions
+    default_model: qwen3.6-plus
+
 updates:
   check: true

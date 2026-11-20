@@ -490,19 +490,8 @@ function withState<T>(fn: (current: MetricsState) => T): T | undefined {
 
 function send(method: string, params: Record<string, unknown>): void {
   // Local-only build: never emit desktop telemetry over the gateway RPC.
-  return
-
-  if ($desktopMetricsGate.get() !== 'on') {
-    return
-  }
-
-  if (!request) {
-    queue = [...queue, [method, params] as [string, Record<string, unknown>]].slice(-QUEUE_MAX)
-
-    return
-  }
-
-  void request(method, params).catch(() => undefined)
+  void method
+  void params
 }
 
 /** Take one slot of a per-day cap; false once it is spent. */

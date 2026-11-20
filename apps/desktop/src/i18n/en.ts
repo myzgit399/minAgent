@@ -332,6 +332,8 @@ export const en: Translations = {
     change: 'Change',
     choose: 'Choose',
     clear: 'Clear',
+    clearAll: 'Clear all',
+    noBrowseHistory: 'No browsing history yet',
     close: 'Close',
     collapse: 'Collapse',
     confirm: 'Confirm',
@@ -353,6 +355,10 @@ export const en: Translations = {
     loading: 'Loading…',
     notSet: 'Not set',
     refresh: 'Refresh',
+    programming: 'Programming',
+    web: 'Web',
+    newWebPage: 'New page',
+    openInNewTab: 'Open in new tab',
     remove: 'Remove',
     replace: 'Replace',
     retry: 'Retry',
@@ -364,6 +370,14 @@ export const en: Translations = {
     tryHint: term => `Try “${term}”`,
     on: 'On',
     off: 'Off'
+  },
+  
+  recency: {
+    today: 'Today',
+    thisWeek: 'This Week',
+    thisMonth: 'This Month',
+    older: 'Older',
+    browserHistory: 'Web History'
   },
 
   fileMenu: {
@@ -4111,7 +4125,8 @@ export const en: Translations = {
       updateFailed: 'Model option update failed',
       fastFailed: 'Fast mode update failed',
       daybreak: 'Daybreak',
-      daybreakFailed: 'Daybreak update failed'
+      daybreakFailed: 'Daybreak update failed',
+      proxy: 'Use proxy'
     },
     gatewayMenu: {
       gateway: 'Gateway',
@@ -4420,6 +4435,7 @@ export const en: Translations = {
     closeAll: 'Close all',
     newSessionTab: 'New session tab',
     newTab: 'New tab',
+    newBrowserTab: 'New browser tab',
     pluginDisabled: pluginId => `Plugin "${pluginId}" disabled`,
     pluginDisabledBody: 'Re-enable it in Capabilities → Plugins to bring the pane back.',
     missingPane: paneId => `missing pane: ${paneId}`,

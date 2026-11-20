@@ -7,6 +7,7 @@ import type { ComponentProps, PointerEvent as ReactPointerEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { requestComposerAttachImages, requestComposerFocus, requestComposerInsert } from '@/app/chat/composer/focus'
+import { hermesConfigKey } from '@/app/hooks/use-config-record'
 import { openGuestContextMenu } from '@/app/context-menu/store'
 import { PanelEmpty } from '@/app/overlays/panel'
 import { PreviewDocumentFrame } from '@/components/ui/preview-document-frame'
@@ -17,6 +18,8 @@ import { guardGuestPointers } from '@/lib/guest-pointer-guard'
 import { hostHas } from '@/lib/host-capabilities'
 import { isLoopbackPreviewUrl, openPreviewTargetInBrowser, remoteHtmlPreviewDocument } from '@/lib/local-preview'
 import { isRemoteGateway } from '@/lib/media'
+import { queryClient } from '@/lib/query-client'
+import { saveHermesConfig } from '@/hermes'
 import {
   addAnnotatePin,
   beginAnnotateMode,
@@ -36,20 +39,23 @@ import { notify, notifyError } from '@/store/notifications'
 import {
   $browserPages,
   $previewServerRestart,
+  $previewTabs,
   commitBrowserTabLocation,
   failPreviewServerRestart,
   noteBrowserPage,
+  openBrowserLinkInNewTab,
   popOutBrowserTab,
   type PreviewRenderMode,
   previewTabOwnerProfile,
   type PreviewTarget,
-  setPreviewRenderMode
+  setPreviewRenderMode,
+  setPreviewTabProxy
 } from '@/store/preview'
 import { currentSessionId } from '@/store/preview-ownership'
 import { $selectedStoredSessionId, knownSessionProfile, ownerLookupSessionRows } from '@/store/session'
 import { canOpenBrowserWindow, isBrowserWindow } from '@/store/windows'
 
-import { previewPartitionForProfile } from '../../../../electron/preview-guest-throttle'
+import { previewPartitionForProfile, previewProxyPartitionForProfile } from '../../../../electron/preview-guest-throttle'
 
 import { placeAnnotateCard, PreviewAnnotateCard } from './preview-annotate-card'
 import {
@@ -290,10 +296,21 @@ function PreviewDocumentBody(props: ComponentProps<typeof LocalFilePreview>) {
  *  A session-less DRAFT tab has no row to resolve a profile from, so it falls back to the tab's own
  *  workspace bucket (#150283 F2) — never the shared default jar, which would expose the default
  *  profile's sign-ins to a named profile's draft workspace. */
-function previewPartitionForTab(sessionId: null | string | undefined, tabId?: null | string): string {
+function previewPartitionForTab(
+  sessionId: null | string | undefined,
+  tabId?: null | string,
+  proxied = false
+): string {
   const sessionProfile = knownSessionProfile(ownerLookupSessionRows(), currentSessionId(sessionId))
+  const profile = sessionProfile ?? previewTabOwnerProfile(tabId)
 
-  return previewPartitionForProfile(sessionProfile ?? previewTabOwnerProfile(tabId))
+  // Proxied tabs get their own jar/network stack, but the jar is per-profile and
+  // STABLE — never per-tab. A tab id is re-minted for every new browser tab, so
+  // keying the cookie jar by it opened an empty jar (and forced a fresh login)
+  // every time the user opened a proxied tab. All proxied tabs of a profile
+  // share one persistent jar; proxy rules are applied per session from the one
+  // global model_proxy.url, so there is no cross-tab conflict.
+  return proxied ? previewProxyPartitionForProfile(profile) : previewPartitionForProfile(profile)
 }
 
 export function PreviewPane({
@@ -307,6 +324,25 @@ export function PreviewPane({
 }: PreviewPaneProps) {
   const { t } = useI18n()
   const copy = t.preview.web
+  const config = queryClient.getQueryData<Record<string, unknown>>(hermesConfigKey())
+  const previewTabs = useStore($previewTabs)
+  const proxyEnabled = Boolean(tabId && previewTabs.find(tab => tab.id === tabId)?.proxy)
+  const configuredProxy = (config as { model_proxy?: { url?: unknown } } | null)?.model_proxy?.url
+  const proxyUrl = typeof configuredProxy === 'string' ? configuredProxy.trim() : ''
+  const previewPartition = previewPartitionForTab(sessionId, tabId, proxyEnabled)
+
+  useEffect(() => {
+    if (!tabId || !hostHas('webviewPreview')) {
+      return
+    }
+
+    void window.hermesDesktop?.setPreviewTabProxy?.({
+      partition: previewPartition,
+      enabled: proxyEnabled,
+      proxyUrl
+    })?.catch(err => notifyError(err, copy.proxyFailed ?? 'Failed to set browser proxy'))
+  }, [copy.proxyFailed, previewPartition, proxyEnabled, proxyUrl, tabId])
+
   // The console store belongs to the TAB, not this render: the toggles live on
   // the tab and must read the same logs this pane appends to.
   const consoleState = previewConsoleState(tabId ?? target.url)
@@ -326,6 +362,35 @@ export function PreviewPane({
   const [currentUrl, setCurrentUrl] = useState(target.url)
   const liveUrlRef = useRef(currentUrl)
   liveUrlRef.current = currentUrl
+
+  const useWpsLogin = useCallback(async () => {
+    if (!tabId) {
+      return
+    }
+    try {
+      const sid = await window.hermesDesktop?.getPreviewWpsSid?.({
+        partition: previewPartition,
+        url: liveUrlRef.current
+      })
+      if (!sid) {
+        notify({ kind: 'error', message: copy.wpsLoginMissing ?? 'No wps_sid found' })
+        return
+      }
+      await saveHermesConfig({
+        providers: {
+          wps_lingxi: {
+            api: 'https://lingxi.kdocs.cn',
+            api_key: sid,
+            default_model: 'deepseek-v4.1-flash'
+          }
+        }
+      }, undefined)
+      notify({ kind: 'success', message: copy.wpsLoginSaved ?? 'WPS 灵犀 login updated' })
+    } catch (err) {
+      notifyError(err, copy.wpsLoginMissing ?? 'Could not read WPS login')
+    }
+  }, [copy.wpsLoginMissing, copy.wpsLoginSaved, previewPartition, tabId])
+
   // The guest-creation effect below deliberately omits target.url from its
   // deps (it reuses the guest across navigations — see #120265), so it reads
   // the live address through this mirror instead of a stale closure.
@@ -1122,15 +1187,16 @@ export function PreviewPane({
     // A page with no background of its own shows white, as in a browser and the remote HTML frame below.
     webview.className = 'flex h-full w-full flex-1 bg-white'
     // Per-profile cookie jar so one profile's in-app sign-ins never land in another's jar (#150283 P1-3).
-    webview.setAttribute('partition', previewPartitionForTab(ownerSessionIdRef.current, tabId))
+    webview.setAttribute('partition', previewPartition)
     webview.setAttribute('src', initialUrl)
     webview.setAttribute('webpreferences', 'contextIsolation=yes,nodeIntegration=no,sandbox=yes')
 
     // The guest preload (main.ts installs it on this partition) forwards a
     // clicked `_blank` anchor here. Admission is our side of the contract —
     // http/https only, so a guest page can never reach the local-file
-    // opener — and the open itself goes through the audited
-    // `hermes:openExternal` channel, never a popup side effect.
+    // opener — and the open is an IN-APP Browser tab, placed right after this
+    // one and focused. It used to go to `shell.openExternal`, which threw the
+    // reader out of the workspace into the system browser.
     const onGuestExternal = (event: Event) => {
       const detail = event as Event & { args?: unknown[]; channel?: string }
 
@@ -1141,7 +1207,7 @@ export function PreviewPane({
       const url = String(detail.args?.[0] ?? '')
 
       if (admitPreviewExternalUrl(url)) {
-        void window.hermesDesktop?.openExternal?.(url)
+        openBrowserLinkInNewTab(url, tabId)
       }
     }
 
@@ -1393,7 +1459,10 @@ export function PreviewPane({
       webview.remove()
       setAnnotate(session => (session.mode ? { ...endAnnotateMode(session), stack: emptyAnnotateStack() } : session))
     }
-  }, [appendConsoleEntry, consoleState, copy, isRemoteHtml, isWebPreview, noteGuestReady, tabId, target.kind])
+  }, [
+    appendConsoleEntry, consoleState, copy, isRemoteHtml, isWebPreview, noteGuestReady,
+    previewPartition, proxyEnabled, tabId, target.kind
+  ])
 
   // Steers the LIVE guest when the session opens a new URL (#120265): loadURL
   // keeps the webview instance (JS state, cookies, form data, scroll, refs,
@@ -1518,6 +1587,9 @@ export function PreviewPane({
             onToggleAnnotate={toggleAnnotate}
             onToggleConsole={() => consoleState.setOpen(open => !open)}
             onToggleDevTools={toggleDevTools}
+            onToggleProxy={tabId && proxyUrl ? () => setPreviewTabProxy(tabId, !proxyEnabled) : undefined}
+            onUseWpsLogin={tabId ? () => void useWpsLogin() : undefined}
+            proxyEnabled={proxyEnabled}
             tabId={tabId}
             url={currentUrl}
           />

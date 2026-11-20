@@ -842,6 +842,9 @@ export interface ModelOptionProvider {
   featured_models?: string[] | null
   capabilities?: Record<string, ModelCapabilities> | null
   pricing?: Record<string, ModelPricing> | null
+  token_multipliers?: Record<string, number> | null
+  token_multiplier_labels?: Record<string, string> | null
+  token_multiplier_basis?: string | null
   pricing_pending?: boolean | null
   free_tier?: boolean | null
   free_tier_pending?: boolean | null
@@ -2178,7 +2181,6 @@ export interface ProfileMirrored {
   model_inherited?: boolean
   voice?: boolean
 }
-/** What ``hermes profile create`` prints about a new profile, read on the machine (and in the profile scope) that made it: built after a local create, or sent by the gateway that made it (``profiles.create`` with ``report``). The contract uses this type itself; a stdlib dataclass, so a local create never loads pydantic. A client treats a receipt missing a field, or with a wrong type, as an unknown outcome. */
 export interface ProfileCreateReceipt {
   path: string
   display_path: string

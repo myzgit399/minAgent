@@ -714,7 +714,7 @@ def _import_member_rel(member: str, prefix: str) -> tuple[str, bool]:
 
 
 def run_import(args) -> Optional[int]:
-    """Restore a Hermes backup; return 1 on damaged archives or incomplete restores."""
+    """Restore a backup; return 1 on damaged archives or incomplete restores."""
     require_file_tooling("`hermes import`")
     zip_path = Path(args.zipfile).expanduser().resolve()
 

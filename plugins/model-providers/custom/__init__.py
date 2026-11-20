@@ -58,7 +58,12 @@ class CustomProfile(ProviderProfile):
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         extra_body: dict[str, Any] = {}
         top_level: dict[str, Any] = {}
-        if ollama_num_ctx:
+        base_url = (ctx.get("base_url") or "").strip()
+        if ollama_num_ctx and (not base_url or _looks_like_ollama_endpoint(base_url)):
+            # ``options`` is an Ollama-native body field. Sending it to any other
+            # OpenAI-compatible endpoint (Gemini's compat layer, vLLM, a relay) is a 400
+            # "Unknown name options"; an unknown base_url keeps the legacy emit, a known
+            # non-Ollama one drops it.
             extra_body["options"] = {"num_ctx": ollama_num_ctx}
         # disabled -> top-level reasoning_effort="none" (Ollama's /v1 ignores
         # extra_body.think) plus think=False only on Ollama URLs; enabled+effort ->

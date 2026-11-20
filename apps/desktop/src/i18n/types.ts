@@ -388,6 +388,10 @@ export interface Translations extends NoticeTranslations {
     loading: string
     notSet: string
     refresh: string
+    programming: string
+    web: string
+    newWebPage: string
+    openInNewTab: string
     remove: string
     replace: string
     retry: string
@@ -399,6 +403,16 @@ export interface Translations extends NoticeTranslations {
     tryHint: (term: string) => string
     on: string
     off: string
+    clearAll: string
+    noBrowseHistory: string
+  },
+  
+  recency: {
+    today: string
+    thisWeek: string
+    thisMonth: string
+    older: string
+    browserHistory: string
   }
 
   fileMenu: {
@@ -3571,6 +3585,8 @@ export interface Translations extends NoticeTranslations {
       fastFailed: string
       daybreak: string
       daybreakFailed: string
+      /** Per-model proxy switch in the model options menu. */
+      proxy?: string
     }
     gatewayMenu: {
       gateway: string
@@ -3794,6 +3810,19 @@ export interface Translations extends NoticeTranslations {
       restartFailed: string
       hideConsole: string
       showConsole: string
+      proxyOn?: string
+      proxyOff?: string
+      proxyLabel?: string
+      proxyToggle?: string
+      proxyFailed?: string
+      addressHistory?: string
+      bookmarkAdd?: string
+      bookmarkRemove?: string
+      bookmarks?: string
+      bookmarksEmpty?: string
+      useWpsLogin?: string
+      wpsLoginSaved?: string
+      wpsLoginMissing?: string
       hideDevTools: string
       openDevTools: string
       goBack: string
@@ -3870,6 +3899,7 @@ export interface Translations extends NoticeTranslations {
     closeAll: string
     newSessionTab: string
     newTab: string
+    newBrowserTab?: string
     pluginDisabled: (pluginId: string) => string
     pluginDisabledBody: string
     missingPane: (paneId: string) => string

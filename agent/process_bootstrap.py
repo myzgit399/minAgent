@@ -31,6 +31,13 @@ _OPENAI_CLS_CACHE = None
 _SHARED_TRANSPORTS: dict[tuple, Any] = {}
 _SHARED_TRANSPORTS_LOCK = threading.Lock()
 _SHARED_TRANSPORTS_MAX = 32
+
+
+def _httpx_proxy_kwarg(httpx_module: Any) -> str:
+    """httpx 0.26 renamed ``proxies=`` to ``proxy=``; keep both working."""
+    parts = str(getattr(httpx_module, "__version__", "0")).split(".")[:2]
+    version = tuple(int(part) if part.isdigit() else 0 for part in parts)
+    return "proxy" if version >= (0, 26) else "proxies"
 # ``request.extensions`` key stamped by ``_SharedTransport.handle_request``;
 # the socket-abort walker in agent_runtime_helpers uses it to find only the
 # owning client's in-flight connections on a shared pool.
@@ -267,8 +274,16 @@ def close_shared_transports() -> int:
     return len(transports)
 
 
-def build_keepalive_http_client(base_url: str = "", *, async_mode: bool = False, verify: Any = True) -> Optional[Any]:
-    """httpx client for OpenAI SDK calls with env-only proxy policy (None on failure).
+def build_keepalive_http_client(
+    base_url: str = "", *, async_mode: bool = False, verify: Any = True,
+    proxy_override: Optional[str] = None,
+) -> Optional[Any]:
+    """httpx client for OpenAI SDK calls (None on failure).
+
+    ``proxy_override`` selects the proxy for this client: ``None`` keeps the env
+    policy below, ``""`` forces a direct connection, and a URL uses that proxy
+    regardless of NO_PROXY. Model requests pass the per-model setting here;
+    auxiliary clients leave it unset and keep env-only behavior.
 
     Explicit no-proxy mounts disable httpx's ``trust_env`` path so macOS system
     proxies (which omit the ExceptionsList) are never applied. ``keepalive_expiry``
@@ -287,7 +302,11 @@ def build_keepalive_http_client(base_url: str = "", *, async_mode: bool = False,
     """
     try:
         import httpx
-        proxy = _get_proxy_for_base_url(base_url)
+        proxy = (
+            _get_proxy_for_base_url(base_url)
+            if proxy_override is None
+            else (normalize_proxy_url(proxy_override) or None)
+        )
         limits = httpx.Limits(max_keepalive_connections=20, max_connections=100, keepalive_expiry=20.0)
         timeout = httpx.Timeout(connect=15.0, read=None, write=15.0, pool=10.0)  # read=None for SSE streaming
         transport_cls = httpx.AsyncHTTPTransport if async_mode else httpx.HTTPTransport
@@ -326,7 +345,10 @@ def build_keepalive_http_client(base_url: str = "", *, async_mode: bool = False,
                 # Default transport = the https view; otherwise httpx builds a third, never-used
                 # direct transport (pool + SSL context) per client.
                 return client_cls(limits=limits, timeout=timeout, transport=mounts["https://"], mounts=mounts)
-        return client_cls(limits=limits, timeout=timeout, proxy=proxy, mounts=mounts or None, verify=verify)
+        return client_cls(
+            limits=limits, timeout=timeout, mounts=mounts or None, verify=verify,
+            **{_httpx_proxy_kwarg(httpx): proxy},
+        )
     except Exception:
         return None
 

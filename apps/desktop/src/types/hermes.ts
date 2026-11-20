@@ -495,6 +495,11 @@ export interface HermesConfig {
     timestamps?: boolean
     tool_progress?: boolean | string
   }
+  model_proxy?: {
+    url?: string
+    /** "provider::model" (or bare model id) → use proxy (true) or force direct (false). */
+    models?: Record<string, boolean>
+  }
   desktop?: {
     font_family?: string
     repo_scan_enabled?: boolean

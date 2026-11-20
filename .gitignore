@@ -349,3 +349,34 @@ infografico/
 /pm/.lock.json.lock
 
 apps/desktop/.dist-build*
+
+# ---------------------------------------------------------------------------
+# minAgent local build artifacts
+# ---------------------------------------------------------------------------
+# Desktop installer output (regenerate with the desktop build scripts).
+/apps/desktop/release-aliyun/
+# Previous electron-vite output left behind by a rebuild.
+/apps/desktop/dist-old-*/
+# Prebuilt grok engine payloads. Both exceed GitHub's 100 MB per-file limit;
+# build them from grok-engine/ instead (see grok-engine/README.md).
+/apps/desktop/native/grok/
+/apps/desktop/native/xgrok/
+# Local scratch scripts and personal pictures.
+/scratch/
+/pics/
+
+# The vendored grok engine keeps its crate examples and log fixtures, which the
+# bare `examples/` and `logs/` rules above would otherwise swallow.
+!grok-engine/**/examples/
+!grok-engine/**/examples/**
+!grok-engine/**/logs/
+!grok-engine/**/logs/**
+# Several engine modules are named export*.rs; the root `export*` rule above is
+# for exported bundles, so keep those Rust sources tracked.
+!grok-engine/**/export*
+# koffi is installed by pnpm. electron-builder packages this copy on Windows;
+# recreate it from the dependency before packaging:
+#   Copy-Item -Recurse -Force apps/desktop/node_modules/koffi apps/desktop/native/koffi
+/apps/desktop/native/koffi/
+# Local-only splash artwork that the app does not reference yet.
+/apps/desktop/public/orange-splash.png

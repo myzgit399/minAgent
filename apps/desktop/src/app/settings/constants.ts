@@ -106,6 +106,14 @@ export const PROVIDER_GROUPS: ProviderPrefix[] = [
   },
   { prefix: 'HERMES_QWEN_', name: 'DashScope (Qwen)', priority: 6 },
   {
+    // ``ALI_KEY`` only — bare ``ALI_`` would also swallow ALIBABA_* keys.
+    prefix: 'ALI_KEY',
+    name: 'Aliyun DashScope',
+    description: '阿里云百炼 — Qwen 及多厂商模型（国内兼容端点）',
+    docsUrl: 'https://bailian.console.aliyun.com/',
+    priority: 6
+  },
+  {
     prefix: 'GLM_',
     name: 'GLM / Z.AI',
     description: 'Zhipu GLM-4.6 and Z.AI hosted endpoints',

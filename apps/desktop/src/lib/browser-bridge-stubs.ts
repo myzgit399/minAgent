@@ -82,6 +82,12 @@ export const BROWSER_BRIDGE_STUBS = {
     reachable: false,
     version: null
   }),
+  setPreviewTabProxy: async () => {
+    throw browserUnsupported('Browser tab proxy')
+  },
+  getPreviewWpsSid: async () => {
+    throw browserUnsupported('WPS session cookie')
+  },
   revealLogs: async () => ({
     error: 'Native log reveal is unavailable in browser-hosted Desktop',
     ok: false,

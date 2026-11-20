@@ -2533,6 +2533,16 @@ DEFAULT_CONFIG = {
         # development from source.
         "allow_unsigned_driver": False,
     },
+    # Outbound proxy for MODEL REQUESTS (separate from iron-proxy below and from the
+    # process-wide HTTPS_PROXY/HTTP_PROXY env policy). `url` is the proxy URL used by
+    # models toggled on in their per-model options menu (e.g. http://127.0.0.1:7890).
+    # `models` maps "provider::model" (or a bare model id) to true (use `url`) or
+    # false (force direct, overriding env proxies). Models without an entry keep
+    # the env policy. Credentials belong in the URL, e.g. http://user:pass@host:port.
+    "model_proxy": {
+        "url": "",
+        "models": {},
+    },
     # Egress credential-injection proxy (iron-proxy) for remote terminal sandboxes (Docker today):
     # the sandbox sees opaque tokens and iron-proxy swaps in real credentials at egress, so a
     # compromised sandbox leaks only tokens that work behind the trusted proxy. Configure with
@@ -2743,6 +2753,8 @@ OPTIONAL_ENV_VARS = OptionalEnvVars({
     "DASHSCOPE_BASE_URL": _prov(
         "Custom DashScope base URL (default: coding-intl OpenAI-compat endpoint)",
         "DashScope Base URL", "", password=False),
+    "ALI_KEY": _prov("Aliyun DashScope API key (阿里云百炼, mainland compatible-mode endpoint)",
+        "Aliyun API Key", "https://bailian.console.aliyun.com/", advanced=False),
     "HERMES_QWEN_BASE_URL": _prov(
         "Qwen Portal base URL override (default: https://portal.qwen.ai/v1)",
         "Qwen Portal base URL (leave empty for default)", None, password=False),

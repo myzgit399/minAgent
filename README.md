@@ -161,6 +161,22 @@ For the full command lists, see the [CLI guide](https://hermes-agent.nousresearc
 
 ---
 
+## Desktop xGrok pane and the grok engine
+
+The desktop app's **xGrok** tab embeds Grok Build's Rust agent runtime through
+`xai_grok_ffi.dll`, loaded with koffi from `apps/desktop/electron/xgrok-ipc.ts`.
+The engine source is vendored in [`grok-engine/`](grok-engine/) so the DLL can be
+rebuilt from this repository; that directory records the upstream revision and
+the build steps. The compiled DLL and `grok.exe` are not tracked because each is
+larger than GitHub's 100 MB per-file limit. Before packaging the Windows
+installer, copy the koffi dependency into place for electron-builder:
+
+```powershell
+Copy-Item -Recurse -Force apps/desktop/node_modules/koffi apps/desktop/native/koffi
+```
+
+---
+
 ## Documentation
 
 All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:

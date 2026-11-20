@@ -1115,11 +1115,14 @@ def _apply_primary_runtime_fields(agent, rt: dict[str, Any]) -> None:
 def _build_anthropic_client_from_runtime(agent, rt: dict[str, Any]) -> None:
     """Rebuild the native Anthropic client from a ``_primary_runtime`` snapshot."""
     from agent.anthropic_adapter import build_anthropic_client
+    from agent.model_proxy import agent_proxy_override
+
     agent._anthropic_api_key = rt["anthropic_api_key"]
     agent._anthropic_base_url = rt["anthropic_base_url"]
     agent._anthropic_client = build_anthropic_client(
         rt["anthropic_api_key"], rt["anthropic_base_url"],
         timeout=get_provider_request_timeout(agent.provider, agent.model),
+        proxy_override=agent_proxy_override(agent),
     )
     agent._is_anthropic_oauth = rt["is_anthropic_oauth"]
     agent.client = None
@@ -1860,13 +1863,23 @@ def _provider_supplied_client(agent, client_kwargs: dict) -> Any | None:
         return None
     profile = None
     provider_name = (getattr(agent, "provider", "") or "").strip()
+    base_url = str(client_kwargs.get("base_url", "") or "").strip()
     if provider_name:
         try:
             profile = get_provider_profile(provider_name)
         except Exception:
             profile = None
+    # A named provider selected in the GUI can be flattened to provider="custom"
+    # by config.set while keeping the WPS 灵犀 base_url. In that case the generic
+    # OpenAI client would hit /chat/completions and get 405; route by host too.
+    host = base_url.split("//", 1)[-1].split("/", 1)[0].lower()
+    if (not profile or getattr(profile, "name", "") in ("custom", "openai_compatible")) \
+            and host in ("lingxi.kdocs.cn", "lingxi.wps.cn"):
+        try:
+            profile = get_provider_profile("wps_lingxi")
+        except Exception:
+            pass
     if profile is None:
-        base_url = str(client_kwargs.get("base_url", "") or "").strip()
         if base_url:
             profile = _profile_for_base_url(base_url)
     if profile is None:
@@ -1917,7 +1930,10 @@ def _ensure_route_client_headers(client_kwargs: dict, provider: str) -> None:
     client_kwargs["default_headers"] = existing
 
 
-def _gemini_native_client(agent, client_kwargs: dict, httpx_verify, *, reason: str, shared: bool):
+def _gemini_native_client(
+    agent, client_kwargs: dict, httpx_verify, *, reason: str, shared: bool,
+    proxy_override: Any = None,
+):
     """Native Gemini client when the base_url is the Gemini API, else None."""
     from agent.gemini_native_adapter import GeminiNativeClient, is_native_gemini_base_url
     base_url = str(client_kwargs.get("base_url", "") or "")
@@ -1928,7 +1944,9 @@ def _gemini_native_client(agent, client_kwargs: dict, httpx_verify, *, reason: s
         if k in {"api_key", "base_url", "default_headers", "timeout", "http_client"}
     }
     if "http_client" not in safe_kwargs:
-        keepalive_http = agent._build_keepalive_http_client(base_url, verify=httpx_verify)
+        keepalive_http = agent._build_keepalive_http_client(
+            base_url, verify=httpx_verify, proxy_override=proxy_override
+        )
         if keepalive_http is not None:
             safe_kwargs["http_client"] = keepalive_http
     client = GeminiNativeClient(**safe_kwargs)
@@ -1954,6 +1972,9 @@ def create_openai_client(agent, client_kwargs: dict, *, reason: str, shared: boo
     # that specific path; this copy locks the contract so future transport/keepalive work can't reintroduce
     # the same class of bug.
     client_kwargs = dict(client_kwargs)
+    from agent.model_proxy import agent_proxy_override
+
+    proxy_override = agent_proxy_override(agent)
     if client_kwargs.get("base_url"):
         client_kwargs["base_url"] = _to_openai_base_url(client_kwargs["base_url"])
     try:
@@ -1999,7 +2020,10 @@ def create_openai_client(agent, client_kwargs: dict, *, reason: str, shared: boo
         return provider_client
     from agent.auxiliary_client import _GEMINI_NATIVE_PROVIDER_NAMES
     if agent.provider in _GEMINI_NATIVE_PROVIDER_NAMES:
-        client = _gemini_native_client(agent, client_kwargs, httpx_verify, reason=reason, shared=shared)
+        client = _gemini_native_client(
+            agent, client_kwargs, httpx_verify, reason=reason, shared=shared,
+            proxy_override=proxy_override,
+        )
         if client is not None:
             return client
     # TCP keepalives so dead provider connections are detected (~60s) instead of hanging in
@@ -2027,7 +2051,9 @@ def create_openai_client(agent, client_kwargs: dict, *, reason: str, shared: boo
             client_kwargs, timeout=timeout if isinstance(timeout, (int, float)) else None,
         )
     if "http_client" not in client_kwargs:
-        keepalive_http = agent._build_keepalive_http_client(client_kwargs.get("base_url", ""), verify=httpx_verify)
+        keepalive_http = agent._build_keepalive_http_client(
+            client_kwargs.get("base_url", ""), verify=httpx_verify, proxy_override=proxy_override
+        )
         if keepalive_http is not None:
             client_kwargs["http_client"] = keepalive_http
     # Retries belong to the outer conversation loop (honors Retry-After); SDK retries would
@@ -2169,6 +2195,8 @@ def _build_switched_client(agent, new_provider, api_key, base_url, api_mode, new
     if api_mode == "anthropic_messages":
         from agent.anthropic_adapter import build_anthropic_client
         from agent.anthropic_credentials import native_anthropic_fallback_token, anthropic_route_is_oauth
+        from agent.model_proxy import agent_proxy_override
+
         # Only fall back to ANTHROPIC_TOKEN for native Anthropic; other anthropic_messages providers
         # must never receive Anthropic credentials.
         is_native_anthropic = new_provider == "anthropic"
@@ -2191,6 +2219,7 @@ def _build_switched_client(agent, new_provider, api_key, base_url, api_mode, new
         agent._anthropic_client = build_anthropic_client(
             effective_key, agent._anthropic_base_url,
             timeout=get_provider_request_timeout(agent.provider, agent.model),
+            proxy_override=agent_proxy_override(agent),
         )
         agent._is_anthropic_oauth = anthropic_route_is_oauth(agent._anthropic_base_url, effective_key, provider=new_provider)
         agent.client = None

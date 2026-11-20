@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { clearBrowserAddressHistory, recordBrowserAddress } from '@/store/browser-address-history'
+
 import { normalizePreviewAddress, PreviewBrowserBar } from './preview-browser-bar'
 
 const baseProps = {
@@ -32,6 +34,7 @@ function installBridge(writeClipboard: ReturnType<typeof vi.fn>) {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  clearBrowserAddressHistory()
   delete desktopWindow.hermesDesktop
 })
 
@@ -235,6 +238,15 @@ describe('PreviewBrowserBar', () => {
     expect(onNavigate).toHaveBeenCalledWith('about:blank')
   })
 
+  it('shows a new Browser tab with an empty address field', () => {
+    const rendered = render(<PreviewBrowserBar {...baseProps} url="about:blank" />)
+    const input = address(rendered)
+
+    expect(input.value).toBe('')
+    fireEvent.focus(input)
+    expect(input.value).toBe('')
+  })
+
   it('leaves an empty field unflagged', () => {
     const rendered = render(<PreviewBrowserBar {...baseProps} />)
     const input = address(rendered)
@@ -256,6 +268,32 @@ describe('PreviewBrowserBar', () => {
 
     expect(onNavigate).not.toHaveBeenCalled()
     expect(address(rendered).value).toBe('https://example.com')
+  })
+
+  it('shows the proxy label with a switch that reports its state', () => {
+    const onToggleProxy = vi.fn()
+    const rendered = render(<PreviewBrowserBar {...baseProps} onToggleProxy={onToggleProxy} proxyEnabled />)
+
+    expect(rendered.getByText('Proxy:')).toBeTruthy()
+    const control = rendered.getByRole('switch', { name: 'Proxy on' })
+    expect(control.getAttribute('aria-checked')).toBe('true')
+
+    fireEvent.click(control)
+
+    expect(onToggleProxy).toHaveBeenCalledOnce()
+  })
+
+  it('offers the address history for quick selection', () => {
+    recordBrowserAddress('https://example.com/docs')
+    const onNavigate = vi.fn()
+    const rendered = render(<PreviewBrowserBar {...baseProps} onNavigate={onNavigate} />)
+    const input = address(rendered)
+
+    fireEvent.focus(input)
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onNavigate).toHaveBeenCalledWith('https://example.com/docs')
   })
 
   it('copies the new address after the page navigates', async () => {

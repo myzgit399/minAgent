@@ -4,7 +4,6 @@ import { useI18n } from '@/i18n'
 import { capitalize, normalize } from '@/lib/text'
 
 import introCopyJsonl from './intro-copy.jsonl?raw'
-import { Wordmark } from './wordmark'
 
 type IntroCopy = {
   headline: string
@@ -146,7 +145,7 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
   return copies[Math.abs(seed) % copies.length] || FALLBACK_COPY[0]
 }
 
-const WORDMARK = 'HERMES AGENT'
+const assetPath = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
 
 function resolveCopy(personality?: string, seed?: number): IntroCopy {
   const personalityKey = normalizeKey(personality)
@@ -176,8 +175,14 @@ export function Intro({ personality, seed }: IntroProps) {
       data-slot="aui_intro"
     >
       <div className="w-full min-w-0">
-        <Wordmark className="mb-1" text={WORDMARK} />
-
+        <img
+          alt=""
+          className="mx-auto mb-2 h-[80dvh] w-auto max-w-full rounded-3xl object-contain shadow-lg"
+          src={assetPath('welcome.jpg')}
+        />
+        <p className="mx-auto mb-1 text-[0.625rem] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
+          minAgent
+        </p>
         <p className="m-0 text-center leading-normal tracking-tight">{body}</p>
       </div>
     </div>

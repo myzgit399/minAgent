@@ -861,6 +861,16 @@ export function ModelPicker({
         const tag = usageTag(provider, row)
         const level = tag ? M.plan.levels[tag] : ''
         const blocked = levelled && planBlocks(provider, row)
+        // Price multiplier badge — shows cost relative to the cheapest non-free model in the provider.
+        // DashScope rows have no prices to diff, so the backend sends a pre-formatted 倍数 label
+        // (basis: qwen-plus = 1×); prefer it when present.
+        const _pm = provider?.price_multipliers?.[row]
+        const _multLabel = provider?.token_multiplier_labels?.[row]
+        const multBadge = _multLabel
+          ? ` [${_multLabel}]`
+          : _pm != null && _pm !== 1
+            ? ` [×${_pm.toFixed(2)}]`
+            : ''
 
         if (section) {
           sectionLines += 1
@@ -875,7 +885,7 @@ export function ModelPicker({
             )}
             <Text color={t.color.muted} dimColor={blocked} {...chipRowProps(t, modelIdx === idx)} wrap="truncate-end">
               {prefix}
-              {idx + 1}. {levelled ? `${row.padEnd(nameWidth)}  ${level}`.trimEnd() : row}
+              {idx + 1}. {levelled ? `${row.padEnd(nameWidth)}  ${level}`.trimEnd() : row}{multBadge}
             </Text>
           </Box>
         )

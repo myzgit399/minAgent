@@ -450,6 +450,7 @@ import { registerPreviewGuestIpc } from './preview-guest-ipc'
 import { commandFocusedGuest } from './preview-guest-offscreen'
 import { applyPreviewGuestAttachPrefs } from './preview-guest-throttle'
 import { PreviewReachRegistry } from './preview-reach'
+import { registerPreviewProxyIpc } from './preview-proxy-ipc'
 import { registerPreviewSignins, runSigninExport } from './preview-signins'
 import { previewHttpUrlTarget } from './preview-url-target'
 import { FirstRunSetupResetError, runPrimaryBackendStartup } from './primary-backend-startup'
@@ -681,6 +682,9 @@ import { enumerateWindowsFrontToBack, enumerationFailed, readWindowBelow } from 
 import { bindWindowChromeEvents } from './window-chrome-events'
 import { appliedPrimaryWindowRoute, WindowConnectionRouteRegistry } from './window-connection-route'
 import { registerWindowControlIpc, windowControlState } from './window-controls'
+import { registerXGrokIpc } from './xgrok-ipc'
+import { registerXGrokPtyIpc } from './xgrok-pty-ipc'
+import { registerXGrokModelIpc } from './xgrok-model-ipc'
 import { revealAction, shouldFocusToTakeKeyboard } from './window-focus-policy'
 import { isAppSized, registerWindowSizing } from './window-growth'
 import { windowMenuTemplate } from './window-menu'
@@ -11187,9 +11191,12 @@ async function dialPoolBackend(profile, entry, opts: { forceLocal?: boolean; poo
     directoryExists(path.join(HERMES_HOME, 'profiles', key))
   )
 
+  rememberGatewayHostProfile(profile)
   const connection = await ensureLocalGateway(async () => {
     const backend = await ensureRuntime(
-      await resolveHermesBackend(['--profile', profile, 'gateway', 'ensure', '--json']),
+      await resolveHermesBackend([
+        '--profile', profile, 'gateway', 'ensure', '--json', ...gatewayHostFlags()
+      ]),
       () => assertPoolEntryStillOwned(poolKey, entry)
     )
 
@@ -11366,6 +11373,38 @@ const backendShutdown = createBackendShutdownCoordinator(async (): Promise<void>
     throw closeStopFailure
   }
 })
+
+// Profiles whose gateway registry carries this GUI's PID. The GUI, not the
+// gateway, decides on exit whether any host is left and calls `host-release`.
+const gatewayHostProfiles = new Set<string>()
+const gatewayHostFlags = () => ['--host-pid', String(process.pid), '--host-kind', 'gui']
+
+function rememberGatewayHostProfile(profile: string): void {
+  gatewayHostProfiles.add(profile || 'default')
+}
+
+async function releaseGatewayHostsOnQuit(): Promise<void> {
+  for (const profile of gatewayHostProfiles) {
+    try {
+      const backend = await resolveHermesBackend([
+        '--profile', profile, 'gateway', 'host-release', ...gatewayHostFlags()
+      ])
+      const result = await runGatewayEnsure(
+        { ...backend, env: desktopBackendSpawnEnv(backend.env || {}) },
+        resolveHermesCwd(),
+        HERMES_HOME,
+        profileBackendParentEnv({ hermesHome: HERMES_HOME, profile }),
+        { timeoutMs: 45_000, label: 'hermes gateway host-release' }
+      )
+      if (result.code !== 0) {
+        rememberLog(`[gateway-host] release failed for ${profile} (exit ${result.code}): ${result.stderr.trim()}`)
+      }
+    } catch (error) {
+      rememberLog(`[gateway-host] release error for ${profile}: ${String(error)}`)
+    }
+  }
+  gatewayHostProfiles.clear()
+}
 
 const quitTeardown = createQuitTeardownCoordinator(() => app.quit())
 
@@ -11608,6 +11647,8 @@ async function startHermes(requestedProfile?: string, inheritsPrimary = false) {
     if (activeProfile) {
       backendArgs.unshift('--profile', activeProfile)
     }
+    backendArgs.push(...gatewayHostFlags())
+    rememberGatewayHostProfile(activeProfile || 'default')
 
     const setup = await runPrimaryBackendStartup({
       signal: localBackendLifecycle.signal,
@@ -13971,6 +14012,19 @@ ipcMain.handle('hermes:window:openInstance', async (event, options) => {
   return { ok: true }
 })
 registerWindowControlIpc(ipcMain, sender => BrowserWindow.fromWebContents(sender))
+// xGrok: embed the grok-build Rust engine in-process (via koffi). Output lines
+// are relayed to the renderer as `xgrok:line`.
+registerXGrokIpc(ipcMain, () => BrowserWindow.getAllWindows()[0] ?? null)
+// xGrok PTY: run the real Grok Build TUI in a pseudo-terminal for full feature
+// parity with standalone `grok` (tools, approvals, slash commands, plan mode).
+const xgrokPty = registerXGrokPtyIpc(ipcMain, {
+  isWindows: IS_WINDOWS,
+  resourcesPath: () => process.resourcesPath,
+  findOnPath,
+  rememberLog
+})
+// xGrok model catalog + per-model proxy policy (reuses minAgent's config).
+registerXGrokModelIpc(ipcMain, { rememberLog, api: request => handleHermesApiRequest(request) })
 ipcMain.handle('hermes:window:openBrowser', async (_event, tabId) => {
   if (typeof tabId !== 'string' || !tabId.trim()) {
     return { ok: false, error: 'invalid-tab-id' }
@@ -15297,6 +15351,7 @@ ipcMain.on('hermes:previewShortcutActive', (_event, active) => {
 
 registerPreviewGuestIpc(owner => streamThrottle.holdWindow(owner))
 // The in-app browser's real-profile sign-ins: main decides "local" from the route's own connection.
+registerPreviewProxyIpc()
 registerPreviewSignins({
   userData: app.getPath('userData'),
   log: rememberLog,
@@ -17911,6 +17966,13 @@ app.on('before-quit', event => {
     { run: (): Promise<void> => backendShutdown.run(), waitForCompletion: backendNeedsWait }
   ]
 
+  if (gatewayHostProfiles.size > 0) {
+    // GUI-side shutdown: release this host, then (if no CLI/GUI host remains)
+    // the CLI helper sends `gateway stop` and waits for the process to exit.
+    // Only after that promise settles does Electron finish quitting.
+    teardownTasks.push({ run: releaseGatewayHostsOnQuit, waitForCompletion: true })
+  }
+
   if (sshNeedsWait) {
     teardownTasks.push({ run: teardownSshForQuit, waitForCompletion: true })
   }
@@ -17978,6 +18040,7 @@ app.on('before-quit', event => {
   // Kill open PTYs before environment teardown to avoid the node-pty#904
   // ThreadSafeFunction SIGABRT race.
   terminalIpc.disposeAllTerminalSessions()
+  xgrokPty.disposeAll()
 
   void backendShutdown.run()
 })

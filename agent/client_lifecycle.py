@@ -77,12 +77,17 @@ def _swap_fallback_clients(agent, fb_client, fb_provider: str, fb_model: str, fb
     if fb_api_mode == "anthropic_messages":
         from agent.anthropic_adapter import build_anthropic_client
         from agent.anthropic_credentials import native_anthropic_fallback_token, anthropic_route_is_oauth
+        from agent.model_proxy import agent_proxy_override
+
         is_anthropic = fb_provider == "anthropic"
         effective_key = credential or (native_anthropic_fallback_token(fb_base_url, model=getattr(agent, "model", None))
                                        if is_anthropic else None) or ""
         agent.api_key = agent._anthropic_api_key = effective_key
         agent._anthropic_base_url = fb_base_url
-        agent._anthropic_client = build_anthropic_client(effective_key, fb_base_url, timeout=timeout)
+        agent._anthropic_client = build_anthropic_client(
+            effective_key, fb_base_url, timeout=timeout,
+            proxy_override=agent_proxy_override(agent),
+        )
         agent._is_anthropic_oauth = anthropic_route_is_oauth(fb_base_url, effective_key, provider=fb_provider)
         agent.client, agent._client_kwargs = None, {}
         return
@@ -184,10 +189,12 @@ class ClientLifecycleMixin:
         return False
 
     @staticmethod
-    def _build_keepalive_http_client(base_url: str = "", *, verify: Any = True) -> Any:
+    def _build_keepalive_http_client(
+        base_url: str = "", *, verify: Any = True, proxy_override: Optional[str] = None
+    ) -> Any:
         """Build the shared OpenAI httpx client used by main and aux paths."""
         from agent.process_bootstrap import build_keepalive_http_client
-        return build_keepalive_http_client(base_url, verify=verify)
+        return build_keepalive_http_client(base_url, verify=verify, proxy_override=proxy_override)
 
     _create_openai_client = _forward("agent.agent_runtime_helpers", "create_openai_client")
     _force_close_tcp_sockets = _forward_static("agent.agent_runtime_helpers", "force_close_tcp_sockets")
@@ -311,6 +318,15 @@ class ClientLifecycleMixin:
         return True
 
     def _ensure_primary_openai_client(self, *, reason: str) -> Any:
+        # The per-model proxy switch is a config change, not a process restart:
+        # retire the shared pool as soon as config.yaml moves so the next
+        # request is built with the new proxy policy.
+        from agent.model_proxy import proxy_policy_signature
+
+        signature = proxy_policy_signature()
+        if getattr(self, "_proxy_policy_signature", None) != signature:
+            self._proxy_policy_signature = signature
+            self._replace_primary_openai_client(reason="model_proxy_change")
         with self._openai_client_lock():
             client = getattr(self, "client", None)
             if client is not None and not self._is_openai_client_closed(client):
@@ -458,15 +474,18 @@ class ClientLifecycleMixin:
                                          api_key=str(request_kwargs.get("api_key", "") or ""), has_images=True)
             if image_headers:
                 request_kwargs["default_headers"] = {**(request_kwargs.get("default_headers") or {}), **image_headers}
-        cached, stale = self._checkout_request_slot(_OPENAI_SLOT, request_kwargs)
+        from agent.model_proxy import agent_proxy_override
+
+        # Snapshot nested dicts (default_headers) so an aliased inner object can't mutate the cache key.
+        snapshot = {k: dict(v) if isinstance(v, dict) else v for k, v in request_kwargs.items()}
+        cache_key = (snapshot, agent_proxy_override(self))
+        cached, stale = self._checkout_request_slot(_OPENAI_SLOT, cache_key)
         if cached is not None:
             return cached
         if stale is not None:
             self._close_openai_client(stale, reason=f"reuse_evict:{reason}", shared=False)
         client = self._create_openai_client(request_kwargs, reason=reason, shared=False)
-        # Snapshot nested dicts (default_headers) so an aliased inner object can't mutate the cache key.
-        snapshot = {k: dict(v) if isinstance(v, dict) else v for k, v in request_kwargs.items()}
-        self._store_request_slot(_OPENAI_SLOT, client, snapshot)
+        self._store_request_slot(_OPENAI_SLOT, client, cache_key)
         return client
 
     def _close_request_openai_client(self, client: Any, *, reason: str) -> None:
@@ -489,19 +508,27 @@ class ClientLifecycleMixin:
         self._abort_request_slot_client(_OPENAI_SLOT, client, reason=reason)
 
     def _request_anthropic_client_key(self) -> tuple:
-        """Cache key over everything forcing a fresh client: credential, base URL/region, timeout, 1M-beta flag."""
+        """Cache key over everything forcing a fresh client: credential, base URL/region, timeout, 1M-beta flag, proxy."""
+        from agent.model_proxy import agent_proxy_override
+
         if getattr(self, "provider", None) == "bedrock":
             return ("bedrock", getattr(self, "_bedrock_region", "us-east-1") or "us-east-1",
                     get_provider_request_timeout(self.provider, self.model))
         return (
             "direct", self._anthropic_api_key, getattr(self, "_anthropic_base_url", None),
             get_provider_request_timeout(self.provider, self.model), bool(getattr(self, "_oauth_1m_beta_disabled", False)),
+            agent_proxy_override(self),
         )
 
     def _build_direct_anthropic_client(self, token: str, base_url: Any) -> Any:
         """Native Anthropic client for ``token``/``base_url`` with the provider/model request timeout."""
         from agent.anthropic_adapter import build_anthropic_client
-        return build_anthropic_client(token, base_url, timeout=get_provider_request_timeout(self.provider, self.model))
+        from agent.model_proxy import agent_proxy_override
+
+        return build_anthropic_client(
+            token, base_url, timeout=get_provider_request_timeout(self.provider, self.model),
+            proxy_override=agent_proxy_override(self),
+        )
 
     def _anthropic_oauth_flag(self, token: str) -> bool:
         """OAuth flag only on native Anthropic routes; third-party Anthropic-protocol endpoints must not trip OAuth paths."""
@@ -510,9 +537,14 @@ class ClientLifecycleMixin:
 
     def _build_anthropic_client_for_key(self, key: tuple) -> Any:
         from agent.anthropic_adapter import build_anthropic_bedrock_client, build_anthropic_client
+        from agent.model_proxy import agent_proxy_override
+
         if key[0] == "bedrock":
             return build_anthropic_bedrock_client(key[1], timeout=key[2])
-        return build_anthropic_client(key[1], key[2], timeout=key[3], drop_context_1m_beta=key[4])
+        return build_anthropic_client(
+            key[1], key[2], timeout=key[3], drop_context_1m_beta=key[4],
+            proxy_override=agent_proxy_override(self),
+        )
 
     def _create_request_anthropic_client(self, *, reason: str) -> Any:
         """Build (or reuse) a request-local Anthropic client for one in-flight call.

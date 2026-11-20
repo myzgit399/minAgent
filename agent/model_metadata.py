@@ -327,10 +327,18 @@ DEFAULT_CONTEXT_LENGTHS = {
     "llama": 131072, "muse-spark-1.3": 1_048_576, "muse-spark": 1_048_576, "inkling": 1_048_576,
     # Qwen — https://help.aliyun.com/zh/model-studio/developer-reference/ (3.8-max/flash
     # 1M verified on OpenRouter & Nous portal 2026-08; qwen3-max = 256K Coding Plan snapshot)
-    "qwen3.8-max": 1_000_000, "qwen3.8-flash": 1_000_000, "qwen3.6-plus": 1048576, "qwen3.7-plus": 1048576,
-    "qwen3-coder-plus": 1000000, "qwen3-coder": 262144, "qwen3-max": 262144, "qwen": 131072,
+    "qwen3.8-max": 1_000_000, "qwen3.8-flash": 1_000_000, "qwen3.7-max": 1_000_000,
+    "qwen3.6-max": 1_000_000, "qwen3.5-max": 1_000_000, "qwen3-omm": 1_000_000,
+    "qwen3.6-plus": 1048576, "qwen3.7-plus": 1048576, "qwen3.5-plus": 1048576,
+    "qwen-max": 32768, "qwen-plus": 8192, "qwen-turbo": 8192, "qwen-long": 131072,
+    "qwen-max-longcontext": 258048, "qwen-vl-max": 7901, "qwen-vl-plus": 7901,
+    "qwen-vl-max-latest": 7901, "qwen-vl-plus-latest": 7901,
+    "qwen3-coder-plus": 1000000, "qwen3-coder": 262144, "qwen3-max": 262144,
+    "qwen-coder-plus": 262144, "qwen-coder-plus-latest": 262144,
+    "qwen-coder-turbo": 32768, "qwen-coder-plus-2026-03-13": 262144,
+    "qwen": 131072,
     # MiniMax — M3 is 1M; M2.x is 204,800. https://platform.minimax.io/docs/api-reference/text-chat-openai
-    "minimax-m3": 1000000, "minimax": 204800,
+    "minimax-m3": 1000000, "minimax-m2.5": 204800, "minimax-m2.1": 204800, "minimax": 204800,
     # GLM — Nous + OpenRouter /v1/models (2026-09-09): 5.3 / 5.3-flash 1,310,720 (:batch/:US 1,048,576);
     # 5.3-flashx 1,048,576 (2026-09-20; its own key, else the shorter 5.3-flash entry wins by substring);
     # 5.2 1,048,576; 5 / 5.1 / 4.7 / 4.6 204,800; *-turbo / 4.7-flash 202,752 (the catch-all).
@@ -339,7 +347,7 @@ DEFAULT_CONTEXT_LENGTHS = {
     "glm-5.3-flash:batch": 1_048_576, "glm-5.3-flash:us": 1_048_576, "glm-5.3-flashx": 1_048_576,
     "glm-5.2": 1_048_576, "glm-5.2:free": 256_000,
     "glm-5.1": 204_800, "glm-5-turbo": 202752, "glm-5v-turbo": 202752, "glm-5": 204_800,
-    "glm-4.7-flash": 202752, "glm-4.7": 204_800, "glm-4.6v": 131072, "glm-4.6": 204_800, "glm": 202752,
+    "glm-4.7-flash": 202752, "glm-4.7": 204_800, "glm-4.6v": 131072, "glm-4.6": 204_800, "glm-4": 204_800,
     # xAI — /v1/models returns no context_length, so these prevent probe-down on api.x.ai
     # custom providers (docs.x.ai). grok-composer(-2.5-fast, Grok Build CLI) is OAuth-only:
     # 200k usable (the /v1/responses ~262144 input+output budget is a separate limit).
@@ -350,7 +358,7 @@ DEFAULT_CONTEXT_LENGTHS = {
     "grok-4.6": 500000, "grok-4.5": 500000, "grok-4.3": 1000000, "grok-4": 256000,
     "grok-3": 131072, "grok-2": 131072, "grok": 131072,
     # Kimi — K3 is 1 Mi (matches the endpoint-scoped override); older Kimi 256K.
-    "kimi-k3": 1_048_576, "kimi": 262144,
+    "kimi-k3": 1_048_576, "kimi-k2.7-code": 262144, "kimi-k2.6": 262144, "kimi": 262144,
     # Upstage Solar — /v1/models returns no context_length. Later generations and new lineups
     # default to 512K (Upstage /v1/solar/models max_model_len, 2026-09).
     "solar-open2": 262144, "solar-pro3": 131072, "solar-pro2": 65536, "solar-mini": 32768, "solar-": 524288,

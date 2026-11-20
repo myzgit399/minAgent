@@ -12,11 +12,13 @@
 
 import { useStore } from '@nanostores/react'
 
-import { findGroup } from '@/components/pane-shell/tree/model'
+import { findGroup, groupLeafIds } from '@/components/pane-shell/tree/model'
 import {
   $activeTreeGroup,
   $layoutTree,
+  activateTreePane,
   closeTabPane,
+  isSessionStripPane,
   revealTreePane,
   treePanesWithPrefix
 } from '@/components/pane-shell/tree/store'
@@ -43,7 +45,7 @@ import {
   type PreviewTarget,
   setPreviewTabPinned
 } from '@/store/preview'
-import { explicitOpenBlocksZone, PREVIEW_TILE_PREFIX } from '@/store/preview-explicit'
+import { explicitOpenBlocksZone, explicitPreviewOpenTabId, PREVIEW_TILE_PREFIX } from '@/store/preview-explicit'
 import { canOpenBrowserWindow } from '@/store/windows'
 
 import { paneMirror } from './pane-mirror'
@@ -219,13 +221,20 @@ const previewPaneId = (tabId: string) => `${PREVIEW_TILE_PREFIX}:${tabId}`
  *  `undefined` means this is the first preview — it opens its own zone. */
 function existingPreviewAnchor(tabId: string): string | undefined {
   const own = previewPaneId(tabId)
-  const inTree = treePanesWithPrefix(`${PREVIEW_TILE_PREFIX}:`).find(id => id !== own)
+
+  // A browser tab docks `center` into the WORKSPACE zone rather than this
+  // preview zone (see the mirror's dir/anchor below), so it must not serve as
+  // an anchor here — anchoring a file onto it would pull the file into the
+  // chat strip. Only non-browser preview panes anchor more previews.
+  const isBrowserPane = (paneId: string) =>
+    targetFor(paneId.slice(`${PREVIEW_TILE_PREFIX}:`.length))?.kind === 'url'
+  const inTree = treePanesWithPrefix(`${PREVIEW_TILE_PREFIX}:`).find(id => id !== own && !isBrowserPane(id))
 
   if (inTree) {
     return inTree
   }
 
-  const head = $dockedVisiblePreviewTabs.get()[0]
+  const head = $dockedVisiblePreviewTabs.get().find(tab => tab.target.kind !== 'url')
 
   return head && head.id !== tabId ? previewPaneId(head.id) : undefined
 }
@@ -236,6 +245,44 @@ function existingPreviewAnchor(tabId: string): string | undefined {
 export function watchPreviewTiles(): void {
   watchPreviewTileMirror()
 
+  // Boot lands on the CONVERSATION, not on a restored Browser tab. Each zone's
+  // active tab is part of the persisted layout, so a session closed while a
+  // Browser was in front came back onto that Browser with the chat behind the
+  // strip — the "it jumps to the browser tab on startup" report. Front the
+  // zone's chat tab once, as early as the tree exists; the Browser keeps its
+  // tab (and its page) one click away in the strip.
+  let bootRefronted = false
+  const frontChatTabOnBoot = () => {
+    const tree = $layoutTree.get()
+
+    if (bootRefronted || !tree) {
+      return
+    }
+
+    bootRefronted = true
+
+    for (const groupId of groupLeafIds(tree)) {
+      const zone = findGroup(tree, groupId)
+
+      if (!zone?.active?.startsWith(`${PREVIEW_TILE_PREFIX}:`)) {
+        continue
+      }
+
+      const chat = zone.panes.find(pane => pane !== zone.active && isSessionStripPane(pane))
+
+      if (chat) {
+        activateTreePane(groupId, chat)
+      }
+    }
+  }
+
+  frontChatTabOnBoot()
+
+  if (!bootRefronted) {
+    // The tree is declared a tick later than this root call.
+    $layoutTree.listen(frontChatTabOnBoot)
+  }
+
   window.hermesDesktop?.onBrowserPopoutClosed?.(tabId => {
     adoptPersistedBrowserTab(tabId)
     markBrowserTabPopped(tabId, false)
@@ -243,13 +290,18 @@ export function watchPreviewTiles(): void {
 
   // The reveal analog of session tiles (session-states calls revealTreePane on
   // open): `openPreview` selects the tab, and the TREE must front its pane —
-  // un-minimize, un-hide, activate in its zone. Both stores, because re-opening
-  // the already-active tab changes only `$previewTabs` (fresh tab object), while
-  // switching tabs changes only the active id.
+  // un-minimize, un-hide, activate in its zone.
+  //
+  // ONLY for the open the user just asked for. `$rightRailActiveTabId` also
+  // moves for reasons that are not a request to see the Browser: the boot
+  // restore of the persisted selection, a session switch re-homing onto that
+  // session's remembered tab, a neighbour promoted after a close. Fronting on
+  // those yanked the main area off the conversation onto a restored Browser tab
+  // the moment the app started, so the front is gated on the explicit stamp.
   const reveal = () => {
     const tabId = $rightRailActiveTabId.get()
 
-    if (tabId && targetFor(tabId)) {
+    if (tabId && targetFor(tabId) && explicitPreviewOpenTabId() === tabId) {
       revealTreePane(`${PREVIEW_TILE_PREFIX}:${tabId}`)
     }
   }
@@ -347,13 +399,16 @@ const watchPreviewTileMirror = paneMirror<{ id: string }>({
   retainLimit: HIDDEN_LIVE_PREVIEW_LIMIT,
   key: tab => tab.id,
   prefix: PREVIEW_TILE_PREFIX,
-  // The FIRST preview still opens its own zone docked beside main (identical
-  // to route tiles — NOT anchored to the file tree, so ⌘J can't take it
-  // along). Every SUBSEQUENT preview stacks into that zone as a center tab:
-  // without the anchor each opened file split a new zone off the right edge
-  // (#93610), turning three file opens into three ever-narrower columns.
-  dir: tab => (existingPreviewAnchor(tab.id) ? 'center' : 'right'),
-  anchor: tab => existingPreviewAnchor(tab.id),
+  // A BROWSER tab docks like a session tile — `center` into the workspace
+  // zone — so the globe "+" opens it as a tab that fills the chat window
+  // instead of splitting off a side-by-side zone. The FIRST non-browser
+  // preview still opens its own zone docked beside main (identical to route
+  // tiles — NOT anchored to the file tree, so ⌘J can't take it along). Every
+  // SUBSEQUENT preview stacks into that zone as a center tab: without the
+  // anchor each opened file split a new zone off the right edge (#93610),
+  // turning three file opens into three ever-narrower columns.
+  dir: tab => (targetFor(tab.id)?.kind === 'url' ? 'center' : existingPreviewAnchor(tab.id) ? 'center' : 'right'),
+  anchor: tab => (targetFor(tab.id)?.kind === 'url' ? 'workspace' : existingPreviewAnchor(tab.id)),
   minWidth: '22rem',
   title: previewTitle,
   tabLead: tabId => <PreviewTabLead tabId={tabId} />,

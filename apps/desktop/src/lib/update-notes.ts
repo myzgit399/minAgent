@@ -191,12 +191,7 @@ function releaseHighlights(tag: null | string): Promise<string[]> {
 /** The notes' items; [] when GitHub is unreachable or has none. Merged PRs are filtered per status. */
 export function fetchUpdateNoteItems(source: UpdateNotesSource, status: NotesStatus): Promise<string[]> {
   // Local-only build: never ask GitHub for release or PR notes.
+  void source
+  void status
   return Promise.resolve([])
-
-  const items =
-    source.kind === 'release'
-      ? releaseHighlights(source.tag)
-      : recentPulls().then(rows => latestMergedPrTitles(rows, status.commits ?? [], status.behind))
-
-  return items.catch(() => [])
 }

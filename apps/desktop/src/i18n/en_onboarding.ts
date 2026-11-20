@@ -1,12 +1,12 @@
 import type { Translations } from './types'
 
 export const enOnboarding: Translations['onboarding'] = {
-  headerTitle: "Let's get you setup with Hermes Agent",
+  headerTitle: "Let's get you setup with minAgent",
   headerDesc: 'Connect a model provider to start chatting. Most options take one click.',
-  preparingInstall: 'Hermes is finishing install. This usually takes under a minute on first run.',
-  starting: 'Starting Hermes…',
+  preparingInstall: 'minAgent is finishing install. This usually takes under a minute on first run.',
+  starting: 'Starting minAgent…',
   setupSlowTitle: 'Setup is taking longer than usual.',
-  setupSlowBody: 'Hermes is still starting in the background.',
+  setupSlowBody: 'minAgent is still starting in the background.',
   continueWithoutSetup: 'Continue without setup',
   lookingUpProviders: 'Looking up providers...',
   collapse: 'Collapse',
@@ -34,7 +34,7 @@ export const enOnboarding: Translations['onboarding'] = {
     xai: { short: 'Grok models', description: 'Direct access to xAI Grok models.' },
     local: {
       short: 'self-hosted',
-      description: 'Point Hermes at a local or self-hosted OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama, etc).'
+      description: 'Point minAgent at a local or self-hosted OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama, etc).'
     }
   },
   backToSignIn: 'Back to sign in',
@@ -66,7 +66,7 @@ export const enOnboarding: Translations['onboarding'] = {
   pickDifferentProvider: 'Pick a different provider',
   signInWith: provider => `Sign in with ${provider}`,
   openedBrowser: provider => `We opened ${provider} in your browser.`,
-  authorizeThere: 'Authorize Hermes there.',
+  authorizeThere: 'Authorize minAgent there.',
   copyAuthCode: 'Copy the authorization code and paste it below.',
   pasteAuthCode: 'Paste authorization code',
   reopenAuthPage: 'Re-open authorization page',

@@ -281,4 +281,47 @@ describe('enforced dock (stacked Bots pane → sessions-zone tab, every boot)', 
 
     expect(tree.$layoutTree.get()).toEqual(dockedRoutinesTree)
   })
+
+  // The 网页 pane's own shape: it was persisted as a SECOND COLUMN beside the
+  // sessions/bots strip (dock.pos 'right' in an earlier build). Anchored on
+  // `sessions` — a core pane that is always registered — the heal must fold it
+  // back in as a tab on the very next boot.
+  it('folds a stranded web pane back into the sessions strip', async () => {
+    const strandedWeb = {
+      type: 'split',
+      id: 'root',
+      orientation: 'row',
+      weights: [1, 3],
+      children: [
+        {
+          type: 'split',
+          id: 'left-col',
+          orientation: 'row',
+          weights: [1, 1],
+          children: [
+            { type: 'group', id: 'g-sessions', panes: ['sessions'], active: 'sessions' },
+            { type: 'group', id: 'g-web', panes: ['web'], active: 'web' }
+          ]
+        },
+        { type: 'group', id: 'g-main', panes: ['workspace'], active: 'workspace' }
+      ]
+    }
+
+    const { model, registry, tree } = await setupTree(strandedWeb)
+
+    registry.register({
+      id: 'web',
+      area: 'panes',
+      title: '网页',
+      data: { placement: 'left', hideOnly: true, dock: { pane: 'sessions', pos: 'center', enforce: true } },
+      render: () => null
+    })
+
+    tree.watchContributedPanes()
+
+    const group = model.findGroupOfPane(tree.$layoutTree.get()!, 'web')!
+
+    expect(group.id).toBe('g-sessions')
+    expect(group.panes).toContain('web')
+  })
 })

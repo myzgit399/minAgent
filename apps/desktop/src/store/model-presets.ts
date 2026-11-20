@@ -25,6 +25,8 @@ export interface ModelPreset {
   effort?: string
   fast?: boolean
   serviceTier?: string
+  /** Whether this model uses the configured proxy for its requests. */
+  proxy?: boolean
 }
 
 export const modelPresetServiceTier = ({ fast, serviceTier }: ModelPreset): string | undefined =>

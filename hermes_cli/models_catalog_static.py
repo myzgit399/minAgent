@@ -6,6 +6,8 @@ maps. Split out of ``hermes_cli.models``.
 
 from __future__ import annotations
 
+import os
+import time
 from typing import Any, NamedTuple
 
 
@@ -205,11 +207,132 @@ _TENCENT_MODELS = ["hy4-preview", "hy3", "hy3-preview"]
 # Alibaba DashScope Coding platform (coding-intl): Qwen + third-party (GLM, Kimi, MiniMax, DeepSeek).
 # Classic DashScope keys should override DASHSCOPE_BASE_URL to
 # https://dashscope-intl.aliyuncs.com/compatible-mode/v1 (OpenAI-compat) or /apps/anthropic.
-_ALIBABA_MODELS = [
-    "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.6-flash", "kimi-k2.5",
-    "qwen3.5-plus", "qwen3-coder-plus", "qwen3-coder-next", "glm-5.2", "glm-5", "glm-4.7",
-    "deepseek-v4-pro", "deepseek-v4-flash-0731", "MiniMax-M2.5",
-]
+
+
+def _dashscope_api_base_from_config(
+    ctx: "ConfigContext | None" = None,
+) -> tuple[str, str]:
+    """Return (*base_url*, *api_key*) for the active alibaba / DashScope config.
+
+    Priority chain::
+
+        1. ``DASHSCOPE_API_KEY`` / ``DASHSCOPE_BASE_URL`` env vars
+        2. profile config under ``alibaba`` / any aliased key that resolves
+           to dashscope (e.g. ``aliyun`` → ``alibaba`` in the auth store)
+
+    Returns ``(base_url, api_key)`` — empty string for either component when
+    not found.  Callers must still validate before making network requests.
+    """
+    # 1. Environment overrides
+    env_key = os.environ.get("DASHSCOPE_API_KEY", "").strip()
+    if env_key:
+        return (os.environ.get("DASHSCOPE_BASE_URL", "").strip() or
+                "https://dashscope.aliyuncs.com"), env_key
+
+    # 2. Current profile config
+    try:
+        ctx = ctx or _current_context()
+        store = _resolve_auth_store(ctx, require=False)
+    except Exception:
+        store = {}
+
+    if not isinstance(store, dict):
+        return "", ""
+
+    from hermes_cli.models import normalize_provider
+
+    # Resolve canonical provider name; look up its config entries
+    normalized = normalize_provider("alibaba")  # 'alibaba' alias list
+    base_url, api_key = "", ""
+    for key in ("alibaba", *normalized):
+        prov = store.get(key, {})
+        if not isinstance(prov, dict):
+            continue
+        bu = (prov.get("base_url") or "").strip()
+        k = (prov.get("api_key") or "").strip()
+        # Prefer a dashscope-specific base_url if present
+        if bu and ("dashscope" in bu.lower() or not base_url):
+            base_url = bu
+        if k and not api_key:
+            api_key = k
+
+    return (base_url or "", api_key)
+
+
+def _dashscope_models_from_api(ctx: "ConfigContext | None" = None) -> list[str]:
+    """Fetch the current model catalog from DashScope ``/v1/models`` and return sorted IDs.
+
+    Falls back to the static *_ALIBABA_MODELS* constant when the network call
+    fails or credentials are missing.  Results are cached for **10 min** keyed on
+    (base_url, auth fingerprint) so repeated picker opens don't hammer the API.
+    """
+    from datetime import datetime, timedelta
+
+    base_url, api_key = _dashscope_api_base_from_config(ctx)
+    if not api_key:
+        return _DEFAULT_ALIBABA_MODELS  # no key — use static list
+
+    cache_key = f"dashscope_models:{base_url}"
+    now = time.time()
+    cached_entry = _dashscope_model_cache.get(cache_key)
+    if cached_entry is not None:
+        cached_models, cached_ts = cached_entry
+        if now - cached_ts < CACHE_TTL_SECS:
+            return cached_models
+
+    try:
+        url = (base_url or "https://dashscope.aliyuncs.com").rstrip("/") + "/compatible-mode/v1/models"
+        headers = {"Accept": "application/json", "Authorization": f"Bearer {api_key}"}
+        payload = _get_json(url, headers, timeout=8.0)
+        models = [item["id"] for item in (payload or {}).get("data", [])
+                  if isinstance(item, dict) and item.get("id")]
+        # Union, not replace: the live route reports only what this key is
+        # entitled to (and 401s once the key lapses), so a narrow answer must
+        # never delete catalog models such as qwen3.8-flash from the picker.
+        merged = [*models, *(m for m in _DEFAULT_ALIBABA_MODELS if m not in models)]
+        result = merged
+        _dashscope_model_cache[cache_key] = (result, now)
+        return result
+    except Exception:
+        return list(_DEFAULT_ALIBABA_MODELS)
+
+
+# Cache entry: (models_list, timestamp_float)
+_dashscope_model_cache: dict[str, tuple[list[str], float]] = {}
+_CACHE_TTL_SECS = 600  # 10 minutes
+
+# The static fallback — used as default and as a safety net.
+def _default_alibaba_models() -> list[str]:
+    """Full DashScope chat catalog (models.dev registry), with the release-time
+    floor kept as a last resort so the picker is never empty.
+
+    Reading the registry here — not just the live ``/v1/models`` route — is what
+    keeps ids like ``qwen3.8-flash`` visible: the live route only reports what
+    the configured key is entitled to, and only when that key still works.
+    """
+    try:
+        from hermes_cli.qwen_catalog import dashscope_chat_model_ids
+
+        ids = dashscope_chat_model_ids()
+        if ids:
+            return ids
+    except Exception:
+        pass
+    return [
+        "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.6-max", "qwen3.5-max",
+        "qwen-max", "qwen-plus", "qwen-turbo", "qwen-long", "qwen-max-longcontext",
+        "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus", "qwen3-omm",
+        "qwen3-coder-plus", "qwen3-coder-next", "qwen-coder-plus-latest", "qwen-coder-plus",
+        "qwen-coder-turbo", "qwen-coder-plus-2026-03-13",
+        "qwen-vl-max", "qwen-vl-plus", "qwen-vl-max-latest", "qwen-vl-plus-latest",
+        "kimi-k2.5", "kimi-k2.7-code", "kimi-k2.6",
+        "glm-5.2", "glm-5.1", "glm-5", "glm-4.7", "glm-4",
+        "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-0731", "deepseek-v3.2",
+        "MiniMax-M2.5", "MiniMax-M2.1", "MiniMax-M2",
+    ]
+
+
+_DEFAULT_ALIBABA_MODELS = _default_alibaba_models()
 _ALIBABA_CODING_PLAN_MODELS = [
     "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus", "qwen3-max-2026-01-23", "qwen3-coder-plus",
     "qwen3-coder-next", "kimi-k2.5", "glm-5", "glm-4.7", "MiniMax-M2.5",
@@ -314,8 +437,8 @@ _PROVIDER_MODELS: dict[str, list[str]] = _CuratedCatalog({
         "anthropic/claude-opus-4.6", "anthropic/claude-sonnet-4.6", "openai/gpt-5.4",
         "google/gemini-3-pro-preview", "google/gemini-3-flash-preview",
     ],
-    "alibaba": list(_ALIBABA_MODELS),
-    "alibaba-cn": list(_ALIBABA_MODELS),
+    "alibaba": list(_DEFAULT_ALIBABA_MODELS),
+    "alibaba-cn": list(_DEFAULT_ALIBABA_MODELS),
     "alibaba-coding-plan": list(_ALIBABA_CODING_PLAN_MODELS),
     "alibaba-coding-plan-cn": list(_ALIBABA_CODING_PLAN_MODELS),
     "alibaba-token-plan": list(_ALIBABA_TOKEN_PLAN_MODELS),

@@ -63,6 +63,7 @@ import {
   $hiddenTreePanes,
   $narrowViewport,
   $newSessionTabAction,
+  $newBrowserTabAction,
   $panesWithCloser,
   $treeDragging,
   $treePaneEpochs,
@@ -433,6 +434,7 @@ export function TreeGroup({
   const workspaceMode = useStore($workspaceMode)
   const workspaceOwnerKey = useStore($workspaceOwnerKey)
   const newSessionTabAction = useStore($newSessionTabAction)
+  const newBrowserTabAction = useStore($newBrowserTabAction)
   const panesWithCloser = useStore($panesWithCloser)
   // Multi-tab selection (⌥/Ctrl-click, Shift-click) — null for every zone but
   // the one holding it, so this subscription is quiet during normal use.
@@ -491,6 +493,9 @@ export function TreeGroup({
       ? { label: t.zones.newSessionTab, onSelect: newSessionTabAction }
       : null) ??
     shown.map(ownNewTab).find(Boolean) ??
+    // Last rung: a strip whose only tenants are utility panes (网页, a file
+    // peek) still mints a session — the "+" never goes dead on the user.
+    (newSessionTabAction ? { label: t.zones.newSessionTab, onSelect: newSessionTabAction } : null) ??
     null
 
   useEffect(() => {
@@ -920,6 +925,21 @@ export function TreeGroup({
                       icon={<Codicon name="add" size="0.8125rem" />}
                       label={newTab.label}
                       onSelect={newTab.onSelect}
+                    />
+                  </span>
+                )}
+                {/* The globe "+" beside the session "+": mint a fresh in-app
+                Browser tab. Original function, unchanged — the 网页 pane's
+                address bar is a convenience beside it, not a replacement. */}
+                {newBrowserTabAction && !node.minimized && (
+                  <span
+                    className="flex shrink-0 items-center [-webkit-app-region:no-drag]"
+                    onPointerDownCapture={() => noteActiveTreeGroup(node.id)}
+                  >
+                    <PaneStripGlyph
+                      icon={<Codicon name="globe" size="0.8125rem" />}
+                      label={t.zones.newBrowserTab ?? 'New browser tab'}
+                      onSelect={newBrowserTabAction}
                     />
                   </span>
                 )}

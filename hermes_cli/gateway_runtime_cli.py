@@ -34,14 +34,54 @@ def _emit(payload, code) -> None:
     raise SystemExit(code)
 
 
+def requested_host(args) -> str | None:
+    """``<kind>:<pid>`` for the CLI/GUI that asked, or None when this short-lived ensure CLI is alone."""
+    host_pid = getattr(args, "host_pid", None)
+    host_kind = getattr(args, "host_kind", "")
+    if not host_pid or not host_kind:
+        return None
+    return f"{host_kind}:{int(host_pid)}"
+
+
+def _register_requested_host(args) -> None:
+    """CLI/GUI passes its own PID; the short-lived ensure CLI is never a host."""
+    host = requested_host(args)
+    if host is None:
+        return
+    from hermes_constants import get_hermes_home
+    from hermes_cli.gateway_host_lifecycle import register_host
+
+    host_kind, _, host_pid = host.partition(":")
+    register_host(host_kind, pid=int(host_pid), home=get_hermes_home())
+
+
+def cmd_gateway_host_release(args) -> None:
+    """Last host's shutdown handoff: release, stop gateway, wait, then reply."""
+    from hermes_constants import get_hermes_home
+    from hermes_cli.gateway_host_lifecycle import end_host
+
+    try:
+        with redirect_stdout(sys.stderr):
+            stopped = end_host(
+                args.host_kind, pid=int(args.host_pid),
+                home=get_hermes_home(), timeout=float(getattr(args, "timeout", "30")),
+            )
+        payload, code = {"ok": True, "gateway_stopped": stopped}, 0
+    except (ValueError, TypeError):
+        payload, code = INVALID_INVOCATION, 2
+    _emit(payload, code)
+
+
 def cmd_gateway_ensure(args) -> None:
     from hermes_constants import get_hermes_home
     from hermes_cli.gateway_runtime import ensure_gateway_runtime
 
     try:
+        _register_requested_host(args)
         # Legacy imported utilities can print; protocol stdout belongs only to us.
         with redirect_stdout(sys.stderr):
-            result = ensure_gateway_runtime(get_hermes_home(), timeout=float(args.timeout))
+            result = ensure_gateway_runtime(get_hermes_home(), timeout=float(args.timeout),
+                                            host=requested_host(args))
         payload, code = _verdict_payload(result), ensure_exit_code(result)
     except (ValueError, TypeError):
         payload, code = INVALID_INVOCATION, 2
@@ -72,6 +112,7 @@ def cmd_gateway_attach(args) -> None:
     if args.start and service_session:
         print(SERVICE_SESSION_START_WARNING, file=sys.stderr)
     scrub_client_launch_env()
+    _register_requested_host(args)
     with redirect_stdout(sys.stderr):
         try:
             attached = attach_gateway(get_hermes_home(), start=args.start, recover=args.recover, timeout=timeout)

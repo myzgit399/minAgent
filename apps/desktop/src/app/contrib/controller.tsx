@@ -8,6 +8,7 @@ import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/com
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
 import { InlinePreviewDirective } from '@/components/assistant-ui/inline-preview-directive'
 import { IdleMount } from '@/components/idle-mount'
+import { WebPane } from '@/app/web/web-pane'
 import { $layoutEditMode, toggleLayoutEditMode } from '@/components/pane-shell/edit-mode'
 import { allPaneIds } from '@/components/pane-shell/tree/model'
 import { LayoutTreeRoot } from '@/components/pane-shell/tree/renderer'
@@ -100,6 +101,7 @@ import { isBrowserWindow, isHudWindow } from '@/store/windows'
 import { BrowserPopoutShell } from '../chat/browser-popout-shell'
 import type { SessionDragPayload } from '../chat/composer/inline-refs'
 import { watchPreviewTiles } from '../chat/preview-tile'
+import { watchXGrokTiles } from '../xgrok/xgrok-tile'
 import { watchRouteTiles } from '../chat/route-tile'
 import { startSessionDrag } from '../chat/session-drag'
 import {
@@ -216,6 +218,29 @@ registry.registerMany([
       maxWidth: `${SIDEBAR_MAX_WIDTH}px`
     },
     render: () => <WiredPane part="sidebar" />
+  },
+  {
+    // 网页: the Browser's address bar + this profile's page history, as a
+    // column beside 编程. It sits left of the workspace so the page it opens
+    // has the room.
+    id: 'web',
+    area: 'panes',
+    title: translateNow('common.web'),
+    data: {
+      placement: 'left',
+      width: '260px',
+      collapsible: true,
+      hideOnly: true,
+      // Stack as a TAB of the sessions zone (`center`) — the same strip that
+      // carries 会话/机器人/编程 — never a column of its own. Anchored on
+      // `sessions` (a core pane that exists before plugins load) so the heal
+      // has somewhere to land on the first adoption pass. `enforce` repairs a
+      // layout that stranded this pane as a second split.
+      dock: { pane: 'sessions', pos: 'center', enforce: true },
+      tabTitle: () => <LocalizedTabTitle select={t => t.common.web} />,
+      tabTitleText: () => translateNow('common.web')
+    },
+    render: () => <WebPane />
   },
   {
     id: 'workspace',
@@ -468,6 +493,7 @@ if (!isBrowserWindow() && !isHudWindow()) {
   startUnrestoredTileTitleBackfill()
   startTileBackendIdentityGuard()
   watchRouteTiles()
+  watchXGrokTiles()
   watchPreviewTiles()
 }
 

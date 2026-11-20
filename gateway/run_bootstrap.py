@@ -940,6 +940,10 @@ async def _start_gateway_runtime(config: Optional[GatewayConfig] = None, replace
                 # gateway (chat -q, TUI) only uses the native WebSocket; it mounts on first request.
                 from gateway.run_api import warm_gateway_dashboard
                 warm_gateway_dashboard(runner)
+            # The daemon lives exactly as long as the host that asked for it (Desktop, a CLI/TUI):
+            # whoever started the application stops its gateway, even when that handoff never ran.
+            from gateway.run_idle_exit import arm_host_exit
+            arm_host_exit(runner)
             await wait_gateway_runtime(runner)
         finally:
             try:

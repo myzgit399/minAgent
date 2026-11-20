@@ -59,7 +59,9 @@ export async function bundleElectronMain({ source, out, stamp, dev = false }) {
     bundle: true,
     platform: 'node',
     target: 'node20',
-    external: ['electron', 'node-pty', 'get-windows', 'fs'],
+    // koffi is a native addon loaded at runtime via require(); keep it external
+    // so the bundler does not try to inline its per-platform .node binaries.
+    external: ['electron', 'node-pty', 'get-windows', 'fs', 'koffi'],
     define,
     logLevel: 'info',
   }

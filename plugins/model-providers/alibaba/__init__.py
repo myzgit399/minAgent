@@ -19,8 +19,11 @@ class DashScopeProfile(ProviderProfile):
         return dashscope_preserve_thinking_extras(model), {}
 
 
+# ``aliyun`` is NOT an alias here: it belongs to the ``aliyun`` plugin profile
+# (mainland endpoint, ALI_KEY), so a bare ``provider: aliyun`` never silently
+# resolves to the international host with DASHSCOPE_API_KEY.
 alibaba = DashScopeProfile(
-    name="alibaba", aliases=("dashscope", "alibaba-cloud", "qwen-dashscope", "aliyun"), env_vars=("DASHSCOPE_API_KEY",),
+    name="alibaba", aliases=("dashscope", "alibaba-cloud", "qwen-dashscope"), env_vars=("DASHSCOPE_API_KEY",),
     base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
 )
 

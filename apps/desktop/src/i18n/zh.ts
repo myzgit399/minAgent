@@ -107,6 +107,10 @@ export const zhOverrides = {
     loading: '加载中…',
     notSet: '未设置',
     refresh: '刷新',
+    programming: '编程',
+    web: '网页',
+    newWebPage: '新网页',
+    openInNewTab: '在新tab中打开',
     remove: '移除',
     replace: '替换',
     retry: '重试',
@@ -117,7 +121,17 @@ export const zhOverrides = {
     update: '更新',
     tryHint: term => `试试“${term}”`,
     on: '开',
-    off: '关'
+    off: '关',
+    clearAll: '清空全部',
+    noBrowseHistory: '暂无访问记录'
+  },
+  
+  recency: {
+    today: '今天',
+    thisWeek: '本周',
+    thisMonth: '本月',
+    older: '更早',
+    browserHistory: '网页历史'
   },
 
   fileMenu: {
@@ -3962,7 +3976,8 @@ export const zhOverrides = {
       updateFailed: '模型选项更新失败',
       fastFailed: '快速模式更新失败',
       daybreak: 'Daybreak',
-      daybreakFailed: 'Daybreak 更新失败'
+      daybreakFailed: 'Daybreak 更新失败',
+      proxy: '使用代理'
     },
     gatewayMenu: {
       gateway: '网关',
@@ -4259,6 +4274,7 @@ export const zhOverrides = {
     closeAll: '全部关闭',
     newSessionTab: '新建会话标签',
     newTab: '新建标签页',
+    newBrowserTab: '新建浏览器标签',
     pluginDisabled: pluginId => `插件“${pluginId}”已禁用`,
     pluginDisabledBody: '在 技能与工具 → 插件 中重新启用即可恢复面板。',
     missingPane: paneId => `缺少面板：${paneId}`,

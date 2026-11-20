@@ -28,6 +28,20 @@ def _clean_anthropic_env(monkeypatch):
 
 
 
+def test_explicit_providers_entry_counts_as_explicit(tmp_path, monkeypatch):
+    """A saved `providers:` row is a deliberate configuration even when its env
+    credential has not been supplied yet (e.g. WPS 灵犀's WPS_LINGXI_SID)."""
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))
+    _write_config(tmp_path, {
+        "providers": {
+            "wps_lingxi": {"api": "https://lingxi.kdocs.cn", "key_env": "WPS_LINGXI_SID"}
+        }
+    })
+
+    from hermes_cli.auth import is_provider_explicitly_configured
+    assert is_provider_explicitly_configured("wps_lingxi") is True
+
+
 def test_ambient_pool_source_does_not_count_as_explicit(tmp_path, monkeypatch):
     """gh_cli-seeded Copilot pool entries are ambient, not explicit config (#56974)."""
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes"))

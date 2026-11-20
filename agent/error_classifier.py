@@ -1133,6 +1133,34 @@ _STAGES: Sequence[Callable[[_Ctx], Optional[Verdict]]] = (
 )
 
 
+# Providers with no paid-credit concept: a "billing / credits exhausted" body from them is a
+# false positive (a self-hosted endpoint has no balance to exhaust; its wording is a quota window
+# or an upstream relay misreporting). A billing verdict against these is downgraded below so the
+# UI never surfaces a misleading paid wall for a provider that has no balance.
+_NO_BILLING_PROVIDERS = frozenset({"local", "ollama", "llama.cpp", "llamacpp"})
+
+
+def _no_billing_provider(slug: str) -> bool:
+    """True when the provider slug (``custom:``-prefixed forms stripped) has no credit balance."""
+    slug = (slug or "").strip().lower()
+    if slug.startswith("custom:"):
+        slug = slug.split(":", 1)[1]
+    return slug in _NO_BILLING_PROVIDERS
+
+
+def _is_proxied_route(provider: str, model: str) -> bool:
+    """True when this model is routed through the configured ``model_proxy`` relay.
+
+    A LAN relay / test device answers in its own words, so a billing-looking body from it is not
+    trustworthy evidence of credit exhaustion at the real provider.
+    """
+    try:
+        from agent.model_proxy import resolve_model_proxy
+        return bool(resolve_model_proxy(provider, model))
+    except Exception:
+        return False
+
+
 def classify_api_error(
     error: Exception, *, provider: str = "", model: str = "",
     approx_tokens: int = 0, context_length: int = 200000, num_messages: int = 0,
@@ -1158,6 +1186,14 @@ def classify_api_error(
         anonymous=is_anonymous_request(provider, api_key),
     )
     stage, verdict = next(((s, v) for s in _STAGES if (v := s(c)) is not None), (None, _V_UNKNOWN))
+    if (verdict["reason"] is _R.billing
+            and (_no_billing_provider(c.provider_slug) or _is_proxied_route(provider, model))):
+        # A billing verdict against a self-hosted endpoint or a model_proxy relay is a false
+        # positive: the endpoint has no credit balance to exhaust, or the relay/test device
+        # answered in its own words. Downgrade to a retryable rate-limit so the UI never shows
+        # a misleading paid wall.
+        logger.info("Downgrading billing verdict for %r (self-hosted or proxied route)", c.provider_slug)
+        verdict = _V_RATE_LIMIT
     extra = _shape_context(c, verdict, hooked=stage in (_plugin_verdict, _profile_verdict))
     if extra:
         verdict = {**verdict, "error_context": {**(verdict.get("error_context") or {}), **extra}}

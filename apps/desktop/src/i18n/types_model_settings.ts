@@ -32,6 +32,11 @@ export interface ModelSettingsTranslations {
   speed: string
   speedStandard: string
   defaultsFailed: string
+  /** Outbound proxy URL shared by models switched to proxy in their options menu. */
+  proxyTitle?: string
+  proxyUrl?: string
+  proxyPlaceholder?: string
+  proxyHint?: string
   loadFailed: string
   restartRequired: string
   restartBackend: string

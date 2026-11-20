@@ -984,8 +984,42 @@ def _lap_canonical_rows(b: _PickerBuild) -> None:
         else:
             model_ids = _live_or_curated_ids(cp.slug, b.curated, merge_models_dev=False,
                                              non_blocking=b.non_blocking_catalogs)
+        # DashScope rows: the disk-cached discovery answer is one key's view at one moment (39
+        # ids, some long dead). Membership comes from the registry catalog so ``qwen3.8-flash``
+        # and the rest of the current catalog are always on the row.
+        if dashscope_ids := _dashscope_catalog_ids(cp.slug, "", b.curated):
+            known = set(dashscope_ids)
+            model_ids = list(dict.fromkeys([*[m for m in model_ids if m in known], *dashscope_ids]))
         b.add_builtin_row(
             cp.slug, cp.label, cp.slug == b.current_provider, model_ids, "canonical", uncapped_ok=False)
+
+
+_DASHSCOPE_URL_MARKERS = ("dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com")
+_DASHSCOPE_SLUGS = frozenset({
+    "alibaba", "alibaba-cn", "aliyun", "aliyun-dashscope", "dashscope", "dashscope-cn",
+    "bailian", "ali-bailian", "alibaba-token-plan", "alibaba-token-plan-cn",
+    "alibaba-coding-plan", "alibaba-coding-plan-cn",
+})
+
+
+def _dashscope_catalog_ids(ep_name: str, api_url: str, curated: dict) -> list[str]:
+    """The registry-backed Qwen catalog for a DashScope endpoint, else ``[]``.
+
+    Membership comes from the models registry (see ``hermes_cli.qwen_catalog``) so a stale
+    persisted discovery cache cannot decide which Qwen models the picker offers.
+    """
+    slug = str(ep_name or "").strip().lower()
+    if slug in _DASHSCOPE_SLUGS:
+        for key in ("aliyun", "alibaba", "alibaba-cn"):
+            if ids := curated.get(key):
+                return list(ids)
+        return []
+    url = str(api_url or "").lower()
+    if any(marker in url for marker in _DASHSCOPE_URL_MARKERS):
+        for key in ("alibaba", "alibaba-cn"):
+            if ids := curated.get(key):
+                return list(ids)
+    return []
 
 
 def _lap_user_provider_rows(b: _PickerBuild, user_providers: dict) -> None:
@@ -1037,6 +1071,21 @@ def _lap_user_provider_rows(b: _PickerBuild, user_providers: dict) -> None:
             discovery_allowed=grp["discovery_allowed"], is_current=is_current)
         if discovered is not None:
             models_list = discovered
+        elif b.curated.get(ep_name):
+            # A ``providers:<plugin>`` entry that only sets ``default_model`` (or an endpoint with
+            # no native /models route) still belongs to the plugin's curated floor, so the picker
+            # shows the same rows ``hermes model`` would offer instead of a one-model placeholder.
+            # A discovered catalog — including an explicitly empty one — is authoritative.
+            models_list = list(dict.fromkeys([*models_list, *b.curated[ep_name]]))
+        # DashScope (百炼) endpoints: the discovered/cached catalog is whatever one key could
+        # see at one moment — and it was freezing the picker on a 39-model snapshot that both
+        # kept long-dead ids and hid ``qwen3.8-flash``. The registry-backed catalog is the
+        # authority for membership; the discovered ids only contribute ordering.
+        dashscope_catalog = _dashscope_catalog_ids(ep_name, api_url, b.curated)
+        if dashscope_catalog:
+            known = set(dashscope_catalog)
+            models_list = [m for m in models_list if m in known]
+            models_list = list(dict.fromkeys([*models_list, *dashscope_catalog]))
 
         b.add_endpoint_row(ep_name, display_name, api_url, models_list, is_current, native_catalog_empty)
         b.seen_slugs.update(ep_aliases)
@@ -1194,6 +1243,14 @@ def _build_curated_lists(current_provider: str, current_base_url: str, current_m
     from hermes_cli.models import OPENROUTER_MODELS, _PROVIDER_MODELS, get_curated_nous_model_ids
     curated: dict[str, list[str]] = dict(_PROVIDER_MODELS)
     curated["openrouter"] = [mid for mid, _ in OPENROUTER_MODELS]
+    # Alibaba / DashScope — always fetches the live catalog from ``/v1/models`` so new Qwen
+    # models surface automatically without a release.  Falls back to the static curated list when
+    # credentials are missing or the API is unreachable.  The function caches for 10 min.
+    try:
+        from hermes_cli.models_catalog_static import _dashscope_models_from_api
+        curated["alibaba"] = _dashscope_models_from_api()
+    except Exception:
+        pass  # keep the static list on any error
     # Plugin profiles without a built-in row: this home's static_models, else fallback_models, are the
     # curated floor, so the non-blocking GUI read (cold catalog cache) never lists an empty provider row.
     from providers import list_providers

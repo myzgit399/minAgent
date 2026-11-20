@@ -679,8 +679,13 @@ def _init_anthropic_client(agent, api_key, base_url, _provider_timeout):
     # trip OAuth code paths — doing so injects Claude-Code identity headers and system prompts that
     # cause 401/403 on their endpoints. See #1739.
     from agent.anthropic_credentials import anthropic_route_is_oauth
+    from agent.model_proxy import agent_proxy_override
+
     agent._is_anthropic_oauth = anthropic_route_is_oauth(base_url, effective_key, provider=agent.provider)
-    agent._anthropic_client = build_anthropic_client(effective_key, base_url, timeout=_provider_timeout)
+    agent._anthropic_client = build_anthropic_client(
+        effective_key, base_url, timeout=_provider_timeout,
+        proxy_override=agent_proxy_override(agent),
+    )
     if not agent.quiet_mode:
         print(f"🤖 AI Agent initialized with model: {agent.model} (Anthropic native)")
         _print_key_banner(effective_key, "token")
@@ -1938,7 +1943,7 @@ def _enforce_minimum_context(agent):
         raise ValueError(
             f"Model {agent.model} has a context window of {_ctx:,} tokens, "
             f"which is below the minimum {MINIMUM_CONTEXT_LENGTH:,} required "
-            f"by Hermes Agent.  {remedy}"
+            f"by minAgent.  {remedy}"
         )
 
 

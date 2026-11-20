@@ -5,7 +5,7 @@
 // how the two halves drift.
 //
 // A .cjs module (not JSON) so the variant is decided at require time:
-// HERMES_DESKTOP_VARIANT=light builds "Hermes Light". The whole config
+// HERMES_DESKTOP_VARIANT=light builds "minAgent Light". The whole config
 // derives from that one flag.
 // @ts-check
 'use strict'
@@ -135,7 +135,21 @@ module.exports = {
     {
       from: 'assets/icon.ico',
       to: 'icon.ico'
-    }
+    },
+    // xGrok: the in-process grok-build engine (Rust cdylib) + its FFI loader.
+    ...(process.platform === 'win32' ? [{
+      from: 'native/xgrok/xai_grok_ffi.dll',
+      to: 'xgrok/xai_grok_ffi.dll'
+    }, {
+      from: 'native/koffi',
+      to: 'koffi'
+    }] : []),
+    // xGrok TUI: the real Grok Build CLI, launched in a PTY from the xGrok tab
+    // for full interactive parity (tools, approvals, slash commands, plan mode).
+    ...(process.platform === 'win32' && fs.existsSync(path.join(__dirname, 'native/grok/grok.exe')) ? [{
+      from: 'native/grok/grok.exe',
+      to: 'grok/grok.exe'
+    }] : [])
   ],
   asar: {
     unpack: ['**/*.node', '**/prebuilds/**', 'dist/**']
@@ -205,7 +219,7 @@ module.exports = {
     // paste onto the stock removable-drive icon). It lives in packaging/ with
     // the background so the `files` whitelist keeps it out of the app bundle.
     icon: 'packaging/dmg-volume.icns',
-    title: 'Hermes Agent Installer',
+    title: 'minAgent Installer',
     // A prebuilt .tiff on purpose, not a PNG plus a @2x sibling: dmg-builder's
     // PNG path runs `tiffutil -cathidpicheck`, which on macOS 26 rewrites both
     // frames to 72 dpi and silently drops the 2x representation. A .tiff is
@@ -282,8 +296,8 @@ module.exports = {
     category: 'Development',
     maintainer: 'Nous Research <support@nousresearch.com>',
     synopsis: light
-      ? 'Remote-only desktop client for Hermes Agent.'
-      : 'Native desktop shell for Hermes Agent.',
+      ? 'Remote-only desktop client for minAgent.'
+      : 'Native desktop shell for minAgent.',
     target: ['AppImage']
   }
 }

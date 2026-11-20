@@ -342,52 +342,65 @@ async def connect_gateway(endpoint=None, subject=None, *, max_size=8 * 1024 * 10
     from hermes_cli.gateway_runtime_discovery import DiscoveryError
     from urllib.parse import urlsplit
 
-    remote = "" if endpoint is not None else os.environ.get("HERMES_TUI_GATEWAY_URL", "").strip()
-    protocols = None
-    if endpoint is not None:
-        ticket = await asyncio.to_thread(_session_ticket, gateway_profile_home(get_hermes_home()), endpoint,
-                                         subject=subject)
-        url, protocols = gateway_ws_target(endpoint, ticket)
-    elif remote:
-        parsed = urlsplit(remote)
-        if parsed.scheme not in {"ws", "wss"} or not parsed.hostname:
-            raise GatewayClientError("Invalid explicit gateway WebSocket URL; no local fallback")
-        url = remote
-    else:
-        # A per-task overlay home is served by the profile its symlinked lock names (#138949).
-        home = gateway_profile_home(get_hermes_home())
-        # A client's own start: the daemon it may launch ends itself once idle (no client, adapter,
-        # cron/kanban work or admission), and the next client starts a fresh one.
-        result = await asyncio.to_thread(ensure_gateway_runtime, home, idle_exit=True)
-        if not attachable(result) or (_REFUSE_RESTART_WAIT.get() and result.state != "ready"):
-            detail = getattr(result, "detail", None)
-            if result.reason_code == "runtime_exited" and detail:
-                # A multi-line startup report (redacted traceback tail + where the full log is).
-                raise GatewayUnavailableError(f"Gateway could not start: {detail}", result.state, result.reason_code)
-            detail = f" ({detail})" if detail else ""
-            raise GatewayUnavailableError(f"Gateway {result.state}: {result.reason_code or 'not_ready'}{detail}",
-                                          result.state, result.reason_code)
-        endpoint = result.endpoint
-        try:
-            policy: dict = {"refuse_restart_wait": True} if _REFUSE_RESTART_WAIT.get() else {}
-            ticket = await asyncio.to_thread(_session_ticket, home, endpoint, **policy)
-        except DiscoveryError as exc:
-            # The control socket refused the ticket: the verdict discovery gives the same refusal.
-            detail = exc.bounded_detail(500)
-            raise GatewayUnavailableError(f"Gateway inaccessible: {exc.reason}" + (f" ({detail})" if detail else ""),
-                                          "inaccessible", exc.reason) from exc
-        url, protocols = gateway_ws_target(endpoint, ticket)
+    host_home = None
     try:
-        # The gateway is a loopback (or explicitly named) peer, never something to route through the
-        # user's HTTP(S) proxy; websockets>=14 reads HTTP_PROXY/HTTPS_PROXY by default and a proxy that
-        # cannot reach 127.0.0.1 turns every launch into a 10 s open timeout.
-        async with connect(url, subprotocols=protocols, open_timeout=10, max_size=max_size,
-                           proxy=None) as ws:
-            if protocols and ws.subprotocol != GATEWAY_WS_PROTOCOL:
-                raise GatewayClientError("Gateway protocol mismatch; update/restart required")
-            async with GatewayClient(ws) as client:
-                yield client
-    except GatewayClientError:
-        raise
-    except (OSError, TimeoutError) as exc:
-        raise GatewayClientError("Gateway connection failed; no local fallback") from exc
+        remote = "" if endpoint is not None else os.environ.get("HERMES_TUI_GATEWAY_URL", "").strip()
+        protocols = None
+        if endpoint is not None:
+            ticket = await asyncio.to_thread(_session_ticket, gateway_profile_home(get_hermes_home()), endpoint,
+                                             subject=subject)
+            url, protocols = gateway_ws_target(endpoint, ticket)
+        elif remote:
+            parsed = urlsplit(remote)
+            if parsed.scheme not in {"ws", "wss"} or not parsed.hostname:
+                raise GatewayClientError("Invalid explicit gateway WebSocket URL; no local fallback")
+            url = remote
+        else:
+            # A per-task overlay home is served by the profile its symlinked lock names (#138949).
+            home = gateway_profile_home(get_hermes_home())
+            from hermes_cli.gateway_host_lifecycle import CLI, register_host
+
+            register_host(CLI, home=home)
+            host_home = home
+            # A client's own start: the daemon it may launch ends itself once idle (no client, adapter,
+            # cron/kanban work or admission), and the next client starts a fresh one.
+            result = await asyncio.to_thread(ensure_gateway_runtime, home, idle_exit=True)
+            if not attachable(result) or (_REFUSE_RESTART_WAIT.get() and result.state != "ready"):
+                detail = getattr(result, "detail", None)
+                if result.reason_code == "runtime_exited" and detail:
+                    # A multi-line startup report (redacted traceback tail + where the full log is).
+                    raise GatewayUnavailableError(f"Gateway could not start: {detail}", result.state, result.reason_code)
+                detail = f" ({detail})" if detail else ""
+                raise GatewayUnavailableError(f"Gateway {result.state}: {result.reason_code or 'not_ready'}{detail}",
+                                              result.state, result.reason_code)
+            endpoint = result.endpoint
+            try:
+                policy: dict = {"refuse_restart_wait": True} if _REFUSE_RESTART_WAIT.get() else {}
+                ticket = await asyncio.to_thread(_session_ticket, home, endpoint, **policy)
+            except DiscoveryError as exc:
+                # The control socket refused the ticket: the verdict discovery gives the same refusal.
+                detail = exc.bounded_detail(500)
+                raise GatewayUnavailableError(f"Gateway inaccessible: {exc.reason}" + (f" ({detail})" if detail else ""),
+                                              "inaccessible", exc.reason) from exc
+            url, protocols = gateway_ws_target(endpoint, ticket)
+        try:
+            # The gateway is a loopback (or explicitly named) peer, never something to route through the
+            # user's HTTP(S) proxy; websockets>=14 reads HTTP_PROXY/HTTPS_PROXY by default and a proxy that
+            # cannot reach 127.0.0.1 turns every launch into a 10 s open timeout.
+            async with connect(url, subprotocols=protocols, open_timeout=10, max_size=max_size,
+                               proxy=None) as ws:
+                if protocols and ws.subprotocol != GATEWAY_WS_PROTOCOL:
+                    raise GatewayClientError("Gateway protocol mismatch; update/restart required")
+                async with GatewayClient(ws) as client:
+                    yield client
+        except GatewayClientError:
+            raise
+        except (OSError, TimeoutError) as exc:
+            raise GatewayClientError("Gateway connection failed; no local fallback") from exc
+    finally:
+        if host_home is not None:
+            # Last host stops the gateway and waits for its exit before this
+            # CLI context unwinds. Gateway itself does no host detection.
+            from hermes_cli.gateway_host_lifecycle import CLI, end_host
+
+            await asyncio.to_thread(end_host, CLI, home=host_home)

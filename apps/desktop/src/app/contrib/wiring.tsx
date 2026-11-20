@@ -25,7 +25,11 @@ import { NotificationStack } from '@/components/notifications'
 import { DesktopOnboardingOverlay } from '@/components/onboarding'
 import { firstRunIntro } from '@/components/onboarding/first-run/kickoff'
 import { OnboardingEnd } from '@/components/onboarding/onboarding-end'
-import { $newSessionTabAction, registerPaneCloser } from '@/components/pane-shell/tree/store'
+import {
+  $newBrowserTabAction,
+  $newSessionTabAction,
+  registerPaneCloser
+} from '@/components/pane-shell/tree/store'
 import { setWorkspaceScope } from '@/components/pane-shell/workspace-scope'
 import { FloatingPet } from '@/components/pet/floating-pet'
 import { RemoteDisplayBanner } from '@/components/remote-display-banner'
@@ -55,7 +59,7 @@ import {
   type OnboardingRequest,
   type OnboardingResume
 } from '@/store/onboarding-run'
-import { $previewTarget } from '@/store/preview'
+import { newBrowserTab, $previewTarget } from '@/store/preview'
 import {
   $activeGatewayProfile,
   $profileScope,
@@ -1028,8 +1032,12 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // session-agnostic; null until wired hides the glyph).
   useEffect(() => {
     $newSessionTabAction.set(openNewSessionTab)
+    $newBrowserTabAction.set(newBrowserTab)
 
-    return () => $newSessionTabAction.set(null)
+    return () => {
+      $newSessionTabAction.set(null)
+      $newBrowserTabAction.set(null)
+    }
   }, [openNewSessionTab])
 
   // The MAIN tab's Close. The workspace pane can't leave the tree, so its

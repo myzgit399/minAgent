@@ -34,6 +34,13 @@ export function clearExplicitPreviewOpen(): void {
   explicit = null
 }
 
+/** The tab an explicit open last stamped, or null. `reveal` uses it to front a
+ *  pane only for the open the user just asked for — a restore or a session
+ *  switch must leave the zone's own tab in front. */
+export function explicitPreviewOpenTabId(): null | RightRailTabId {
+  return explicit?.tabId ?? null
+}
+
 function paneGroupId(tabId: string): null | string {
   const tree = $layoutTree.get()
 

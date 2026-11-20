@@ -98,7 +98,10 @@ interface ModelEditSubmenuProps {
    *  session, a preset store, or the gateway itself — the owning surface's
    *  controller decides what an edit means. That's what lets the same submenu
    *  drive a live chat session and a detached per-task override. */
-  onSetOptions: (patch: { effort?: string; fast?: boolean; serviceTier?: string }) => void
+  onSetOptions: (patch: { effort?: string; fast?: boolean; proxy?: boolean; serviceTier?: string }) => void
+  /** Whether this model uses the configured outbound proxy. Undefined on
+   *  surfaces that do not expose proxy controls. */
+  proxy?: boolean
   /** This row's provider slug. */
   provider: string
   /** Whether this model supports reasoning effort. */
@@ -132,6 +135,7 @@ export function ModelOptionsContent({
   isActive,
   onSelectModel,
   onSetOptions,
+  proxy,
   reasoning
 }: ModelEditSubmenuProps) {
   const { t } = useI18n()
@@ -166,7 +170,7 @@ export function ModelOptionsContent({
   const ultrafastOn = serviceTier === 'ultrafast'
   const fastOn = fastControl.kind === 'none' ? false : fastControl.on && !ultrafastOn
 
-  return !hasFast && !ultrafastSupported && !daybreak && !reasoning ? (
+  return proxy === undefined && !hasFast && !ultrafastSupported && !daybreak && !reasoning ? (
     <div className="px-2.5 py-3 text-xs text-(--ui-text-tertiary)">{copy.noOptions}</div>
   ) : (
     <>
@@ -218,6 +222,18 @@ export function ModelOptionsContent({
             checked={daybreak.on}
             className="ml-auto"
             onCheckedChange={daybreak.set}
+            size="xs"
+          />
+        </DropdownMenuItem>
+      ) : null}
+      {proxy !== undefined ? (
+        <DropdownMenuItem className={dropdownMenuRow} onSelect={event => event.preventDefault()}>
+          {copy.proxy ?? 'Use proxy'}
+          <Switch
+            aria-label={copy.proxy ?? 'Use proxy'}
+            checked={proxy}
+            className="ml-auto"
+            onCheckedChange={checked => onSetOptions({ proxy: checked })}
             size="xs"
           />
         </DropdownMenuItem>

@@ -453,4 +453,12 @@ export type BotsMessages = {
     runsRaw: string
     timesTotal: (count: number) => string
   }
+  /** The 编程 pane: grok build sessions for this profile. */
+  programming: {
+    newGrok: string
+    projects: string
+    empty: string
+    openFailed: string
+    entryHint: string
+  }
 }

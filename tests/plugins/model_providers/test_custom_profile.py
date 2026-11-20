@@ -199,6 +199,25 @@ class TestCustomReasoningWithNumCtx:
         assert eb == {"options": {"num_ctx": 8192}}
         assert tl == {}
 
+    def test_num_ctx_dropped_on_known_non_ollama_endpoint(self, custom_profile):
+        """``options`` is Ollama-native; Gemini's OpenAI-compat layer 400s on it."""
+        eb, _ = custom_profile.build_api_kwargs_extras(
+            reasoning_config=None,
+            ollama_num_ctx=65536,
+            model="gemini-3.8-flash",
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        )
+        assert "options" not in eb
+
+    def test_num_ctx_kept_on_ollama_endpoint(self, custom_profile):
+        eb, _ = custom_profile.build_api_kwargs_extras(
+            reasoning_config=None,
+            ollama_num_ctx=65536,
+            model="qwen3",
+            base_url="http://127.0.0.1:11434/v1",
+        )
+        assert eb == {"options": {"num_ctx": 65536}}
+
 
 class TestCustomResponsesEffortVocabulary:
     """The Responses transport honours a custom endpoint's configured ``max`` (#114249).
