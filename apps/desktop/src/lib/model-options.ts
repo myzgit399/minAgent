@@ -117,6 +117,10 @@ interface ModelOptionsRequest {
   sessionId?: null | string
 }
 
+/** Gateway catalog change checks run periodically in the background; polling
+ * the picker at this cadence surfaces model-list additions/removals promptly. */
+export const MODEL_OPTIONS_REFETCH_MS = 60_000
+
 export function modelOptionsQueryKey(
   profile: null | string | undefined,
   sessionId?: null | string,

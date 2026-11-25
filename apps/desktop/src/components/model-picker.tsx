@@ -411,6 +411,7 @@ function ModelResults({
                   {t.shell.modelMenu.modelResets(resetLabel)}
                 </Badge>
               )}
+              {!locked && <MultiplierBadge isCurrent={isCurrent} model={model} provider={provider} />}
               {provider.plan_usage?.kind === 'usage_window' ? (
                 <UsageLevelTag isCurrent={isCurrent} level={usageTag(provider, model)} />
               ) : (
@@ -419,7 +420,12 @@ function ModelResults({
                   <TokenMultiplier
                     basis={provider.token_multiplier_basis}
                     isCurrent={isCurrent}
-                    label={provider.token_multiplier_labels?.[model]}
+                    label={
+                      provider.token_multiplier_labels?.[model] &&
+                      !provider.model_multiplier_labels?.[model]
+                        ? provider.token_multiplier_labels[model]
+                        : null
+                    }
                   />
                 </>
               )}
@@ -776,6 +782,36 @@ function TokenMultiplier({
         isCurrent ? 'bg-primary-foreground/20' : 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
       )}
       title={basis ? `${label} tokens · 1× = ${basis}` : `${label} tokens`}
+    >
+      {label}
+    </span>
+  )
+}
+
+// Credit multiplier (倍率) badge, right-aligned after the model name. Uses the
+// unified model_multiplier_labels from any provider; falls back to the legacy
+// Qwen token_multiplier_labels so both sources render identically (e.g. "0.6X").
+function MultiplierBadge({
+  provider,
+  model,
+  isCurrent
+}: {
+  provider: ModelOptionProvider
+  model: string
+  isCurrent: boolean
+}) {
+  const label = provider.model_multiplier_labels?.[model] ?? provider.token_multiplier_labels?.[model]
+  if (!label) {
+    return null
+  }
+  const basis = provider.model_multipliers?.[model]
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-sm px-1 py-0.5 font-sans text-[0.62rem] font-semibold tabular-nums',
+        isCurrent ? 'bg-primary-foreground/20' : 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
+      )}
+      title={basis ? `Credit multiplier ${label} (1X = basis model)` : `Credit multiplier ${label}`}
     >
       {label}
     </span>

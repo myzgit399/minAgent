@@ -131,6 +131,14 @@ def build_models_payload(
         rows = _reorder_canonical(rows)
     if pricing:
         _apply_pricing(rows, force_fresh_nous_tier=force_fresh_nous_tier, cached_only=pricing_cache_only)
+    # Credit multipliers (倍率) — display-only. Cheap (in-process 5-min cache),
+    # so every picker surface gets them, not only the ones that asked for pricing.
+    try:
+        from hermes_cli.model_multipliers import apply_multipliers
+
+        apply_multipliers(rows, cached_only=pricing_cache_only)
+    except Exception:
+        logging.getLogger(__name__).debug("model multiplier annotation skipped", exc_info=True)
     # Both metadata decorators consult ``model_overrides``.  Snapshot the
     # read-only config once for this payload rather than letting each model
     # lookup reopen config.yaml through models_dev._cfg_get().

@@ -361,6 +361,25 @@ function renderMenu(current: Partial<ModelMenuController['current']> = {}, host:
   return select
 }
 
+describe('model multiplier badge', () => {
+  it('renders the label right after a model that has a multiplier', async () => {
+    getGlobalModelOptions.mockResolvedValue({
+      providers: [{
+        models: ['gemini-3.1-pro', 'gemini-2.5-flash'],
+        name: 'Google',
+        slug: 'google',
+        model_multiplier_labels: { 'gemini-3.1-pro': '0.6X' }
+      }]
+    })
+
+    renderMenu()
+
+    const row = (await screen.findByText('Gemini 3.1 Pro')).closest('[role="menuitem"]')!
+    expect(row.textContent).toContain('0.6X')
+    expect(row.querySelector('[data-slot="model-menu-row-badge"]')?.textContent ?? '').not.toContain('0.6X')
+  })
+})
+
 // Curation is ONE global preference, so it belongs to the catalog rather than
 // to whichever surface mounted it. If a host had to opt in, the composer and
 // the kanban board would end up disagreeing about what "my models" means —

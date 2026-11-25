@@ -31,6 +31,8 @@ RUNS_PATH = "/api/public/v1/credits/runs"
 CHAT_PATH = "/api/public/v1/agent-runtime/chat/completions"
 STATUS_PATH = "/api/public/v1/sessions/{session_id}/execution_status"
 DEFAULT_MODEL = "deepseek-v4.1-flash"
+MODELS_PATH = "/api/aioffice/v1/sessions/models"
+MODELS_CACHE_PATH = "/api/aioffice/v1/sessions/plans"  # same models + multiplier metadata
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Lingxi Claw/1.3.36 Chrome/144.0.7559.236 "
       "Electron/40.8.2 Safari/537.36")
@@ -81,6 +83,43 @@ def _cookie_parts(raw: str) -> tuple[str, str, str]:
     if uid and "uid=" not in text:
         extras.append(f"uid={uid}")
     return "; ".join([text, *extras]), uid, fingerprint
+
+
+def fetch_model_catalog(*, api_key=None, base_url=None, timeout=8.0):
+    """Return the live model IDs from WPS 灵犀's ``sessions/models`` endpoint.
+
+    Mirrors the cookie/UA shape the chat transport uses (WPS rejects a Bearer
+    token here). ``api_key`` is the ``wps_sid`` value from config. Returns
+    ``None`` on any failure so callers fall back to ``FALLBACK_MODELS``.
+    Never logs the credential.
+    """
+    raw = str(api_key or os.environ.get("WPS_LINGXI_SID")
+              or os.environ.get("WPS_LINGXI_COOKIE") or "").strip()
+    if not raw:
+        return None
+    cookie, _, _ = _cookie_parts(raw)
+    base = str(base_url or BASES[0]).rstrip("/")
+    headers = {
+        "Cookie": cookie,
+        "User-Agent": UA,
+        "Accept": "application/json",
+        "X-Client-Type": "lingxi_claw",
+        "Referer": base + "/",
+    }
+    for candidate in [base] + [b for b in BASES if b != base]:
+        try:
+            resp = httpx.get(candidate + MODELS_PATH, headers=headers, timeout=float(timeout or 8))
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            models = (data.get("data") or {}).get("models") if isinstance(data, dict) else None
+            ids = [m.get("key") for m in models
+                   if isinstance(m, dict) and isinstance(m.get("key"), str) and m["key"]]
+            if ids:
+                return list(dict.fromkeys(ids))
+        except Exception:
+            continue
+    return None
 
 
 def last_user_text(messages: Any) -> str:

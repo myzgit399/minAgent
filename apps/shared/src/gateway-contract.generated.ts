@@ -823,6 +823,9 @@ export interface ModelOptionsResult {
   providers: ModelOptionProvider[]
   model?: string
   provider?: string
+  /** Bumped by the gateway when a provider's /models list changes. Clients poll
+   * this and refetch the picker without a restart. */
+  catalog_revision?: number
 }
 /** One ``hermes_cli/inventory.py::build_models_payload`` provider row (the union of every field the builder sets; ``pricing_pending`` / ``free_tier_pending`` mark the cached-only path). */
 export interface ModelOptionProvider {
@@ -845,6 +848,9 @@ export interface ModelOptionProvider {
   token_multipliers?: Record<string, number> | null
   token_multiplier_labels?: Record<string, string> | null
   token_multiplier_basis?: string | null
+  /** Credit multipliers (倍率) from any provider. Unified across Qwen/CodeBuddy/pricing. */
+  model_multipliers?: Record<string, number> | null
+  model_multiplier_labels?: Record<string, string> | null
   pricing_pending?: boolean | null
   free_tier?: boolean | null
   free_tier_pending?: boolean | null

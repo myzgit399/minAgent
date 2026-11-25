@@ -2338,8 +2338,16 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             from hermes_cli.inventory import build_model_options_payload, load_picker_context
 
             def _build_payload() -> dict[str, Any]:
-                return build_model_options_payload(
+                payload = build_model_options_payload(
                     load_picker_context(), include_unconfigured=include_unconfigured, refresh=refresh)
+                # Dynamic refresh: clients poll this revision and refetch when it moves.
+                try:
+                    from hermes_cli.model_catalog_refresh import total_revision
+
+                    payload["catalog_revision"] = total_revision()
+                except Exception:
+                    payload["catalog_revision"] = 0
+                return payload
             # Enrichment can fetch pricing/provider catalogs: keep it off the event loop.
             payload = await asyncio.to_thread(_build_payload)
             return web.json_response(payload)

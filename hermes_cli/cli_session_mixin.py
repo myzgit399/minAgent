@@ -291,6 +291,18 @@ class CLISessionMixin:
         model_short = self.model.split("/")[-1] if "/" in self.model else self.model
         if len(model_short) > 30:
             model_short = model_short[:27] + "..."
+        model_multiplier = ""
+        try:
+            from hermes_cli.model_multipliers import all_labels
+
+            model_multiplier = (
+                all_labels().get(self.model)
+                or all_labels().get(self.model.rsplit(":", 1)[-1])
+                or ""
+            )
+        except Exception:
+            pass
+        model_display = f"{model_short} {model_multiplier}" if model_multiplier else model_short
         api_indicator = "[green bold]●[/]" if self.api_key else "[red bold]●[/]"
         try:
             from hermes_cli.skin_engine import get_active_skin
@@ -308,7 +320,7 @@ class CLISessionMixin:
         if self._provider_source:
             provider_info += f"{sep}[dim]{_escape(t('cli.session.status_auth', source=self._provider_source))}[/]"
         self._console_print(
-            f"  {api_indicator} [{accent_color}]{model_short}[/]{sep}"
+            f"  {api_indicator} [{accent_color}]{model_display}[/]{sep}"
             f"[bold {label_color}]{tool_status}[/]{toolsets_info}{provider_info}")
 
     def _show_session_status(self):

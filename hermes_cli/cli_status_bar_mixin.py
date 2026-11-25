@@ -206,6 +206,18 @@ class CLIStatusBarMixin:
         model_short = model_short.removesuffix(".gguf")
         if len(model_short) > 26:
             model_short = f"{model_short[:23]}..."
+        # Credit multiplier (倍率) beside the selected model in the input window.
+        model_multiplier = ""
+        try:
+            from hermes_cli.model_multipliers import all_labels
+
+            model_multiplier = (
+                all_labels().get(model_name)
+                or all_labels().get(model_name.rsplit(":", 1)[-1])
+                or ""
+            )
+        except Exception:
+            pass
 
         prompt_start = getattr(self, "_prompt_start_time", None)
         turn_live = prompt_start is not None
@@ -213,6 +225,7 @@ class CLIStatusBarMixin:
         snapshot = {
             "model_name": model_name,
             "model_short": model_short,
+            "model_multiplier": model_multiplier,
             "duration": format_duration_compact(elapsed_seconds),
             "session_title": self._get_status_bar_session_title(),
             "prompt_elapsed": self._format_prompt_elapsed(
@@ -1042,10 +1055,13 @@ class CLIStatusBarMixin:
                 add(name, style(count) if callable(style) else style, f"{glyph} {count}")
 
         if _ok("model"):
+            model_label = model_short
+            if snapshot.get("model_multiplier"):
+                model_label = f"{model_short} {snapshot['model_multiplier']}"
             if styled:
-                segs.append([(_SB, " ☤ "), (_STRONG, model_short)])
+                segs.append([(_SB, " ☤ "), (_STRONG, model_label)])
             else:
-                segs.append([("", f"☤ {model_short}")])
+                segs.append([("", f"☤ {model_label}")])
         narrow, wide = width < 52, width >= 76
         if narrow:
             # Narrow bars put duration ahead of the goal segment; the other tiers reverse it.

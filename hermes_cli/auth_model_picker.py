@@ -69,9 +69,15 @@ class _ModelPickerRows:
         self, all_models: list[str], pricing: Optional[dict[str, dict[str, str]]], *,
         current_model: str, sale_chrome: bool, usage=None,
         notes: Optional[dict[str, str]] = None,
+        multipliers: Optional[dict[str, str]] = None,
     ) -> None:
         from hermes_cli.models_pricing import _format_price_per_mtok, compute_sale_discount
         self.current_model = current_model
+        # Credit multipliers (倍率), right-aligned after the model name. Kept
+        # separate from pricing so rows without prices still get the badge.
+        self.multipliers = multipliers or {}
+        self.mult_col = max((len(label) for label in self.multipliers.values()), default=0)
+        self.has_multipliers = bool(self.multipliers)
         # Per-model dim annotation (e.g. "usage credits"); the row stays selectable.
         self.notes = notes or {}
         self.window_mode = usage is not None
@@ -144,14 +150,21 @@ class _ModelPickerRows:
         segs.extend(((_GAUGE_GAP, None), (f"{word:<{_COST_COL}}", _LEVEL_STYLE.get(level or ""))))
         return segs
 
+    def _multiplier_segment(self, mid: str) -> list[tuple[str, str | None]]:
+        """Right-aligned credit multiplier (倍率) badge, e.g. ``0.6X``."""
+        if not self.has_multipliers:
+            return []
+        label = self.multipliers.get(mid) or self.multipliers.get(mid.split(":", 1)[-1]) or ""
+        return [(f"  {label:>{self.mult_col}}", "dim")]
+
     def segments(self, mid: str) -> list[tuple[str, str | None]]:
         """Build a rich radiolist row: yellow ★/% , dim was, plain prices — or usage gauges on the window."""
         current = [(_CURRENT_SUFFIX, None)] if mid == self.current_model else []
         note = [(f"  · {self.notes[mid]}", "dim")] if self.notes.get(mid) else []
         if self.window_mode:
-            return self._cost_segments(mid) + current
+            return self._cost_segments(mid) + self._multiplier_segment(mid) + current
         if not self.has_pricing:
-            return [(mid, None), *note, *current]
+            return [(mid, None), *self._multiplier_segment(mid), *note, *current]
 
         inp, out, cache, pct, was_inp, was_out = self._price_cache.get(mid, ("", "", "", None, "", ""))
         on_sale = pct is not None
@@ -169,7 +182,7 @@ class _ModelPickerRows:
             segs.append((f"  -{pct}%", "yellow"))
             if was_inp or was_out:
                 segs.append((f"  was {was_inp}/{was_out}", "dim"))
-        return segs + note + current
+        return segs + self._multiplier_segment(mid) + note + current
 
     def label(self, mid: str) -> str:
         return "".join(text for text, _style in self.segments(mid))
@@ -195,6 +208,8 @@ class _ModelPickerRows:
             if self.any_on_sale:
                 header += "  ★ = on sale"
             lines.append(header)
+        if self.has_multipliers:
+            lines.append(f"{pad}{'':>{self.name_col}} {'':>{max(self.price_col, 3) * 2 + 2}}  {'倍率':>{self.mult_col}}")
         return lines
 
     def menu_title(self, title: str = "Select default model:") -> str:
@@ -254,6 +269,17 @@ def _print_numbered_rows(rows: _ModelPickerRows, menu_title: str, ordered: list[
     return num_width
 
 
+def _discover_multipliers(model_ids: list[str]) -> dict[str, str]:
+    """Formatted credit multipliers for the listed models, or {} on any failure."""
+    try:
+        from hermes_cli.model_multipliers import all_labels
+
+        labels = all_labels()
+    except Exception:
+        return {}
+    return {mid: labels[mid] for mid in model_ids if mid in labels}
+
+
 def _prompt_model_selection(
     model_ids: list[str], current_model: str = "",
     pricing: Optional[dict[str, dict[str, str]]] = None,
@@ -298,7 +324,7 @@ def _prompt_model_selection(
 
     rows = _ModelPickerRows(
         ordered + list(_unavailable), pricing, current_model=current_model, sale_chrome=sale_chrome,
-        usage=window_usage, notes=notes)
+        usage=window_usage, notes=notes, multipliers=_discover_multipliers(ordered + list(_unavailable)))
     _DIM = "\033[2m"
     _RESET = "\033[0m"
 

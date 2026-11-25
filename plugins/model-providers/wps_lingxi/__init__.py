@@ -17,16 +17,21 @@ from providers import register_provider
 from providers.base import ProviderProfile
 
 FALLBACK_MODELS = (
+    "auto",
     "deepseek-v4.1-flash",
     "deepseek-v4-pro-0813",
     "qwen3.8_flash",
-    "qwen3.8_max",
+    "qwen4_max",
     "mimo-v2.6-pro",
     "GLM-5.3-Flash",
     "GLM-5.3",
+    "minimax_m3",
+    "doubao_seed_2_1_pro_260628",
     "kimi-k3",
+    "kimi-k3.1-pro",
 )
 MODEL_ALIASES = {
+    "auto": "auto",
     "flash": "deepseek-v4.1-flash",
     "pro": "deepseek-v4-pro-0813",
     "qwen": "qwen3.8_flash",
@@ -45,6 +50,23 @@ class WpsLingxiProfile(ProviderProfile):
     def get_max_tokens(self, model: str | None) -> int | None:
         return None
 
+    def fetch_models(self, *, api_key=None, base_url=None, timeout=8.0):
+        """Fetch the live WPS 灵犀 model list from its sessions/models endpoint.
+
+        WPS Lingxi's catalog is a private GET (cookie ``wps_sid`` auth), not an
+        OpenAI ``/v1/models`` endpoint, so the base implementation cannot reach
+        it. Reading this endpoint is what makes newly published models (e.g.
+        ``qwen4_max``, ``minimax_m3``, ``kimi-k3.1-pro``) appear without a code
+        change. On any failure we return ``None`` and callers fall back to
+        ``FALLBACK_MODELS`` above.
+        """
+        try:
+            from .transport import MODELS_PATH, fetch_model_catalog
+
+            return fetch_model_catalog(api_key=api_key, base_url=base_url, timeout=timeout)
+        except Exception:  # pragma: no cover - discovery must never break a picker
+            return None
+
 
 register_provider(WpsLingxiProfile(
     name="wps_lingxi",
@@ -56,7 +78,7 @@ register_provider(WpsLingxiProfile(
     auth_type="api_key",
     api_mode="chat_completions",
     supports_health_check=False,
-    supports_model_listing=False,
+    supports_model_listing=True,
     supports_vision=False,
     fallback_models=FALLBACK_MODELS,
     model_aliases=MODEL_ALIASES,

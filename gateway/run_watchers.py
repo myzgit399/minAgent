@@ -217,7 +217,12 @@ class GatewaySessionWatchersMixin(GatewayAutoResumeMixin):
 
     async def _model_catalog_refresh_watcher(self) -> None:
         """Refresh the /model picker's remote catalogs every TTL window. The picker itself only
-        refreshes on a cold/stale open, so if nobody opens ``/model`` the cache never updates."""
+        refreshes on a cold/stale open, so if nobody opens ``/model`` the cache never updates.
+
+        Also probes configured custom providers (e.g. ``custom:codebuddy``) so a
+        provider adding/removing models is detected without a gateway restart;
+        :func:`note_catalog_change` bumps a revision the desktop picker polls.
+        """
         from hermes_cli.model_catalog import refresh_catalogs, refresh_interval_seconds
         await asyncio.sleep(30)  # let startup settle
         while self._running:
@@ -225,6 +230,12 @@ class GatewaySessionWatchersMixin(GatewayAutoResumeMixin):
                 await asyncio.to_thread(refresh_catalogs)
             except Exception as exc:
                 logger.debug("Model catalog refresh failed: %s", exc)
+            try:
+                from hermes_cli.model_catalog_refresh import refresh_configured_custom_providers
+
+                await asyncio.to_thread(refresh_configured_custom_providers)
+            except Exception as exc:
+                logger.debug("Custom provider model refresh failed: %s", exc)
             try:
                 interval = refresh_interval_seconds()
             except Exception:

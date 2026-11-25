@@ -1977,8 +1977,17 @@ def _store_cache_entry(cache_key: str, entry: dict) -> None:
 
     def write_row() -> None:
         cache = _load_provider_models_cache()
+        old_models = (cache.get(cache_key) or {}).get("models") if isinstance(cache.get(cache_key), dict) else None
         cache[cache_key] = entry
         _save_provider_models_cache(cache)
+        # Dynamic refresh: bump a revision when this provider's model-id set changed.
+        # Runs inside the lock so the comparison sees the exact prior row.
+        try:
+            from hermes_cli.model_catalog_refresh import note_catalog_change
+
+            note_catalog_change(cache_key, old_models, entry.get("models"))
+        except Exception:
+            logging.getLogger(__name__).debug("catalog change detection skipped", exc_info=True)
 
     write_under_cache_lock(_provider_models_cache_path(), write_row)
 

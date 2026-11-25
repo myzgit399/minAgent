@@ -131,6 +131,26 @@ function ModelPrice({ pricing }: { pricing: ModelPricing }) {
   )
 }
 
+/** Compact per-row credit multiplier badge (倍率), e.g. `0.6X`, right-aligned
+ *  after the model name. Uses the unified `model_multiplier_labels` from any
+ *  provider; falls back to the legacy Qwen `token_multiplier_labels` so both
+ *  sources render identically. */
+function ModelMultiplier({ provider, model }: { provider: ModelOptionProvider; model: string }) {
+  const label = provider.model_multiplier_labels?.[model] ?? provider.token_multiplier_labels?.[model]
+  if (!label) {
+    return null
+  }
+  const basis = provider.model_multipliers?.[model]
+  return (
+    <span
+      className="shrink-0 rounded-sm bg-sky-500/15 px-1 py-px font-sans text-[0.625rem] font-semibold tabular-nums text-sky-700 dark:text-sky-300"
+      title={basis ? `Credit multiplier ${label} (1X = basis model)` : `Credit multiplier ${label}`}
+    >
+      {label}
+    </span>
+  )
+}
+
 /** One model choice, everything a caller needs to act on a selection.
  *  `effort` is '' for "inherit the default" and 'none' for thinking off. */
 export interface ModelChoice {
@@ -1197,6 +1217,7 @@ function ModelFamilyRow({
         ) : null}
         {showPricing && pricing && !rowLevel ? <ModelPrice pricing={pricing} /> : null}
         {rowLevel ? <UsageLevelTag level={usageTag(provider, family.id)} /> : null}
+        <ModelMultiplier model={family.id} provider={provider} />
         {settings.map(setting => (
           <ModelChip key={setting} setting>
             {setting}

@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 
 import type { HermesGateway } from '@/hermes'
 import { quickModelOptions } from '@/lib/chat-runtime'
-import { currentModelCapabilities, modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
+import { currentModelCapabilities, MODEL_OPTIONS_REFETCH_MS, modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 
 import type { ChatBarState } from './composer/types'
 
@@ -53,7 +53,11 @@ export function useChatBarState({
         request: requestModelOptionsForOwner,
         sessionId: activeSessionId
       }),
-    enabled: gatewayOpen
+    enabled: gatewayOpen,
+    // Detect provider model-list changes without a gateway restart: the
+    // endpoint is cache-only on repeat calls, so this poll stays cheap.
+    refetchInterval: gatewayOpen ? MODEL_OPTIONS_REFETCH_MS : false,
+    refetchOnWindowFocus: false
   })
 
   const quickModels = useMemo(
